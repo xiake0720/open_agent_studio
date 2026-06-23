@@ -9,6 +9,7 @@ from backend.app.api.v1.router import api_router
 from backend.app.core.config import settings
 from backend.app.core.exceptions import register_exception_handlers
 from backend.app.core.logging import setup_logging
+from backend.app.db.init_db import init_db
 
 logger = logging.getLogger("open_agent_studio")
 
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
         settings.APP_NAME,
         settings.APP_ENV,
     )
+
+    await init_db()
 
     yield
 

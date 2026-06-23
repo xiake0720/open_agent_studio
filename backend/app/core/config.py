@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic_settings import BaseSettings,SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api"
     LOG_LEVEL: str = "INFO"
 
-    DATABASE_URL: str = "sqlite:///./data/open_agent_studio.db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./data/open_agent_studio.db"
 
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
