@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
 
+    API_PREFIX: str = "/api"
+    LOG_LEVEL: str = "INFO"
+
     DATABASE_URL: str = "sqlite:///./data/open_agent_studio.db"
 
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

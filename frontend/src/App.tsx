@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-type HealthResponse = {
-  ok: boolean;
+type ApiResponse<T> = {
+  code: number;
+  message: string;
+  data: T | null;
+};
+
+type HealthData = {
+  status: string;
   app: string;
   env: string;
   time: string;
 };
+
+type HealthResponse = ApiResponse<HealthData>;
 
 function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -21,6 +29,9 @@ function App() {
         return response.json();
       })
       .then((data: HealthResponse) => {
+        if (data.code !== 0) {
+          throw new Error(data.message || "后端返回业务错误");
+        }
         setHealth(data);
       })
       .catch((err: unknown) => {
@@ -40,7 +51,7 @@ function App() {
         <button className="new-chat-button">+ 新建会话</button>
 
         <div className="conversation-list">
-          <div className="conversation-item active">Day 1 骨架测试</div>
+          <div className="conversation-item active">Day 2 后端基础结构</div>
           <div className="conversation-item">后续会话示例</div>
         </div>
       </aside>
@@ -63,7 +74,7 @@ function App() {
           <div className="message assistant">
             <div className="message-role">Assistant</div>
             <div className="message-content">
-              今天只验证前后端是否打通。Agent 和模型调用后面再接。
+              Day 2 主要验证后端基础结构：配置、日志、统一响应、统一异常和路由拆分。
             </div>
           </div>
 
@@ -89,7 +100,7 @@ function App() {
         <footer className="composer">
           <input
             disabled
-            placeholder="Day 1 暂不实现发送消息，明后天开始接聊天接口"
+            placeholder="Day 2 暂不实现发送消息，后面开始接聊天接口"
           />
           <button disabled>发送</button>
         </footer>
@@ -100,7 +111,10 @@ function App() {
         <div className="timeline-item success">1. 前端启动成功</div>
         <div className="timeline-item success">2. 请求后端 /api/health</div>
         <div className={health ? "timeline-item success" : "timeline-item"}>
-          3. 等待后端返回
+          3. 等待后端返回统一响应结构
+        </div>
+        <div className={health?.data ? "timeline-item success" : "timeline-item"}>
+          4. 后端基础结构验证完成
         </div>
       </aside>
     </div>
