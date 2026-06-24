@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from pydantic import BaseModel,ConfigDict,Field
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class ConversationCreate(BaseModel):
     """
@@ -10,6 +11,7 @@ class ConversationCreate(BaseModel):
     title: str = Field(default="新会话", max_length=200)
     agent_mode: str = Field(default="general", max_length=50)
     default_model: str | None = Field(default=None, max_length=100)
+
 
 class ConversationResponse(BaseModel):
     """
