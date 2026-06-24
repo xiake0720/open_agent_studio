@@ -3,10 +3,13 @@ from pathlib import Path
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.db.base import Base
-from backend.app.db.session import engine
+from backend.app.db.session import AsyncSessionLocal, engine
 
 # 关键：导入所有模型，确保 Base.metadata 能收集到表结构。
 from backend.app import models  # noqa: F401
+
+
+from backend.app.db.seed import seed_model_configs
 
 
 def ensure_sqlite_dir() -> None:
@@ -31,5 +34,8 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    async with AsyncSessionLocal() as db:
+        await seed_model_configs(db)
 
     logger.info("数据库初始化完成 | url=%s", settings.DATABASE_URL)
