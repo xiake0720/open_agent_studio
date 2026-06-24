@@ -21,7 +21,7 @@ function App() {
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/health")
+    fetch("http://127.0.0.1:9099/api/health")
       .then((response) => {
         if (!response.ok) {
           throw new Error(`请求失败：${response.status}`);

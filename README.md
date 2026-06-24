@@ -48,4 +48,4 @@ OpenAgent Studio 是一个基于 React、FastAPI、SQLite 和 OpenAI Agents SDK 
 ## 启动后端
 
 ```bash
-uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 9099

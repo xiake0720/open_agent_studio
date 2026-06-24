@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
 
     API_HOST: str = "127.0.0.1"
-    API_PORT: int = 8000
+    API_PORT: int = 9099
 
     API_PREFIX: str = "/api"
     LOG_LEVEL: str = "INFO"
