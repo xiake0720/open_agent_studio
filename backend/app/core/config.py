@@ -1,7 +1,28 @@
 from functools import lru_cache
 from typing import List
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+# 当前文件：
+# backend/app/core/config.py
+#
+# parents[0] = backend/app/core
+# parents[1] = backend/app
+# parents[2] = backend
+# parents[3] = 项目根目录 open_agent_studio
+BASE_DIR = Path(__file__).resolve().parents[3]
+
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+ENV_FILE = BASE_DIR / ".env"
+
+# 关键：把 .env 里的所有变量加载进 os.environ
+# 这样 os.getenv("GLM_API_KEY") 才能拿到值
+load_dotenv(ENV_FILE, override=False)
+
 
 class Settings(BaseSettings):
     """

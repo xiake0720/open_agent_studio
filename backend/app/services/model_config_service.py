@@ -50,3 +50,36 @@ async def get_model_config(
         )
 
     return model_config
+
+async def get_default_model_config(
+    db: AsyncSession,
+) -> ModelConfig:
+    """
+    获取默认可用模型。
+
+    当前规则：
+    1. 只查 enabled=True
+    2. 优先 support_streaming=True
+    3. 按 provider/display_name 排序取第一个
+    """
+
+    stmt = (
+        select(ModelConfig)
+        .where(ModelConfig.enabled.is_(True))
+        .order_by(
+            ModelConfig.provider.asc(),
+            ModelConfig.display_name.asc(),
+        )
+        .limit(1)
+    )
+
+    result = await db.execute(stmt)
+    model_config = result.scalar_one_or_none()
+
+    if model_config is None:
+        raise AppException(
+            message="没有可用的模型配置",
+            code=40405,
+        )
+
+    return model_config
