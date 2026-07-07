@@ -15,8 +15,8 @@ class ChatRequest(BaseModel):
         description="模型配置ID。不传则使用默认模型。",
     )
 
-
 class ChatResponse(BaseModel):
+    run_id: str
     conversation_id: str
     user_message_id: str
     assistant_message_id: str
