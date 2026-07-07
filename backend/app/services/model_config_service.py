@@ -39,8 +39,8 @@ async def get_model_config(
 
     如果不存在，抛出业务异常。
     """
-
-    model_config = await db.get(ModelConfig, model_config_id)
+    stmt = select(ModelConfig).where(ModelConfig.model_id == model_config_id)
+    model_config = await db.scalar(stmt)
 
     if model_config is None:
         raise AppException(
