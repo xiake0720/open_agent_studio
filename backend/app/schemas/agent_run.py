@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 class AgentRunResponse(BaseModel):
     id: str
@@ -20,3 +19,29 @@ class AgentRunResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class AgentRunCreateRequest(BaseModel):
+    """
+    创建一次流式 Agent 运行。
+
+    注意：
+    这里只是创建运行记录，还不会马上执行模型。
+    真正执行是在 GET /agent-runs/{run_id}/stream 里完成。
+    """
+
+    conversation_id: str = Field(description="会话ID")
+    content: str = Field(min_length=1, description="用户输入内容")
+    model_config_id: str | None = Field(
+        default=None,
+        description="模型配置ID。不传则使用会话默认模型或系统默认模型。",
+    )
+
+
+class AgentRunCreateResponse(BaseModel):
+    run_id: str
+    conversation_id: str
+    user_message_id: str
+    model_config_id: str
+    model: str
+    agent_name: str
+    stream_url: str

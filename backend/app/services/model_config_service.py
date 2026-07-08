@@ -39,7 +39,7 @@ async def get_model_config(
 
     如果不存在，抛出业务异常。
     """
-    stmt = select(ModelConfig).where(ModelConfig.model_id == model_config_id)
+    stmt = select(ModelConfig).where((ModelConfig.id == model_config_id) | (ModelConfig.model_id == model_config_id))
     model_config = await db.scalar(stmt)
 
     if model_config is None:
