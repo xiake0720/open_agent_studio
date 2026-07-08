@@ -1,73 +1,83 @@
-# React + TypeScript + Vite
+# OpenAgent Studio Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+这是 OpenAgent Studio 的正式前端包，基于 React + TypeScript + Vite 构建，已按当前后端 Day10 以及后续规划接口预留。
 
-Currently, two official plugins are available:
+## 已适配接口
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+当前已实际接入：
 
-## React Compiler
+- `GET /api/health`
+- `GET /api/conversations`
+- `POST /api/conversations`
+- `GET /api/conversations/{conversation_id}`
+- `DELETE /api/conversations/{conversation_id}`
+- `GET /api/conversations/{conversation_id}/messages`
+- `POST /api/conversations/{conversation_id}/messages`
+- `GET /api/models?enabled_only=true`
+- `POST /api/agent-runs`
+- `GET /api/agent-runs/{run_id}`
+- `GET /api/agent-runs/{run_id}/stream`
+- `POST /api/chat`，作为流式接口未就绪时的兼容回退
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+已预留但后端可以后续再实现：
 
-## Expanding the ESLint configuration
+- `GET /api/agent-runs/{run_id}/events`
+- `GET /api/agent-runs/{run_id}/tool-calls`
+- `POST /api/images/generate`
+- `GET /api/assets`
+- `POST /api/model-compare`
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+这些预留接口不会影响当前 Day10 运行。不存在时前端会优雅降级。
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 明暗主题
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+右上角有太阳/月亮切换按钮：
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- 夜间模式：默认深色 Agent 工作台风格
+- 白天模式：干净明亮的生产级控制台风格
+
+主题会保存到 `localStorage`，刷新页面后保持上次选择。
+
+## 使用方式
+
+把本目录替换到项目根目录：
+
+```text
+open_agent_studio/
+├── backend/
+└── frontend/
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+安装依赖并启动：
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd frontend
+npm install
+npm run dev
 ```
+
+后端保持：
+
+```bash
+uvicorn backend.app.main:app --reload --port 9099
+```
+
+默认使用 Vite 代理：
+
+```env
+VITE_API_BASE_URL=/api
+VITE_BACKEND_URL=http://127.0.0.1:9099
+```
+
+生产部署时，如果前端和后端同域，保留 `VITE_API_BASE_URL=/api` 即可。如果前后端分离部署，可以改成后端完整地址。
+
+## 设计说明
+
+本前端不是简单 demo，而是按后续上线准备的工作台结构：
+
+- 左侧会话列表、搜索、新建、删除
+- 中间 ChatGPT 风格对话区
+- 顶部模型选择、Agent 模式选择、明暗主题切换、执行面板开关
+- 右侧 Agent Trace 面板，展示 SSE 事件和运行状态
+- 对 `code != 0` 的业务错误做统一提示
+- 对未来工具调用、模型对比、图片生成、Run Events 落库做了 API 封装预留
