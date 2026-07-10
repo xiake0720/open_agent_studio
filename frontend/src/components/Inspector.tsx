@@ -2,6 +2,7 @@ import { Activity, Bot, CheckCircle2, Clock, Copy, Database, ListTree, Terminal,
 import clsx from 'clsx'
 import type { RunEvent, ToolCall } from '../types'
 import { formatDuration, safeJson } from '../utils/format'
+import { ToolEventCard } from './ToolEventCard'
 
 type Props = {
   events: RunEvent[]
@@ -34,7 +35,7 @@ export function Inspector({ events, activeRunId, streaming, tokenCount, model, a
   const started = events.find((item) => item.event === 'run.started')
   const completed = [...events].reverse().find((item) => item.event === 'run.completed')
   const duration = typeof completed?.data.duration_ms === 'number' ? completed.data.duration_ms : undefined
-
+  const visibleEvents = events.filter((item) => item.event !== 'token.delta',)
   return (
     <aside className="inspector">
       <div className="inspector__header">
@@ -48,7 +49,7 @@ export function Inspector({ events, activeRunId, streaming, tokenCount, model, a
       <div className="trace-grid">
         <div className="trace-card"><Database size={17} /><span>Run ID</span><strong>{activeRunId || '--'}</strong></div>
         <div className="trace-card"><Bot size={17} /><span>Agent</span><strong>{agentName || '--'}</strong></div>
-        <div className="trace-card"><Activity size={17} /><span>Tokens</span><strong>{tokenCount}</strong></div>
+        <div className="trace-card"><Activity size={17} /><span>流式片段</span><strong>{tokenCount}</strong></div>
         <div className="trace-card"><Clock size={17} /><span>耗时</span><strong>{formatDuration(duration)}</strong></div>
       </div>
 
@@ -63,28 +64,82 @@ export function Inspector({ events, activeRunId, streaming, tokenCount, model, a
       </div>
 
       <div className="event-list">
-        {events.length === 0 ? (
+        {visibleEvents.length === 0 ? (
           <div className="empty-events">还没有事件。发送消息后，这里会展示 run.started、token.delta、tool.called、run.completed 等执行过程。</div>
-        ) : events.map((item, index) => (
-          <details key={item.id} className={clsx('event-card', `event-card--${eventTone(item.event)}`)} open={index >= events.length - 3 || item.event.includes('error')}>
-            <summary>
-              <span className="event-card__icon"><EventIcon event={item.event} /></span>
-              <span className="event-card__name">{item.event}</span>
-              <span className="event-card__time">{new Date(item.createdAt).toLocaleTimeString()}</span>
-              <button
-                type="button"
-                className="copy-btn"
-                onClick={(event) => {
-                  event.preventDefault()
-                  void navigator.clipboard.writeText(safeJson(item.data))
-                }}
-                title="复制 JSON"
-              >
-                <Copy size={13} />
-              </button>
-            </summary>
-            <pre>{safeJson(item.data)}</pre>
-          </details>
+        ) : visibleEvents.map((item, index) => (
+            <div className="event-list">
+              {visibleEvents.length === 0 ? (
+                <div className="empty-events">
+                  还没有执行事件。发送消息后，这里会展示
+                  run.started、agent.updated、tool.called、
+                  tool.output、message.completed、run.completed
+                  等执行过程。
+                </div>
+              ) : (
+                visibleEvents.map((item, index) => {
+                  // 工具调用和工具返回，使用专用卡片展示
+                  if (
+                    item.event === 'tool.called' ||
+                    item.event === 'tool.output'
+                  ) {
+                    return (
+                      <ToolEventCard
+                        key={item.id}
+                        event={item}
+                      />
+                    )
+                  }
+
+                  // 其他事件继续使用原来的通用事件卡片
+                  return (
+                    <details
+                      key={item.id}
+                      className={clsx(
+                        'event-card',
+                        `event-card--${eventTone(item.event)}`,
+                      )}
+                      open={
+                        index >= visibleEvents.length - 3 ||
+                        item.event.includes('error')
+                      }
+                    >
+                      <summary>
+                        <span className="event-card__icon">
+                          <EventIcon event={item.event} />
+                        </span>
+
+                        <span className="event-card__name">
+                          {item.event}
+                        </span>
+
+                        <span className="event-card__time">
+                          {new Date(
+                            item.createdAt,
+                          ).toLocaleTimeString()}
+                        </span>
+
+                        <button
+                          type="button"
+                          className="copy-btn"
+                          onClick={(event) => {
+                            event.preventDefault()
+
+                            void navigator.clipboard.writeText(
+                              safeJson(item.data),
+                            )
+                          }}
+                          title="复制 JSON"
+                        >
+                          <Copy size={13} />
+                        </button>
+                      </summary>
+
+                      <pre>{safeJson(item.data)}</pre>
+                    </details>
+                  )
+                })
+              )}
+            </div>
         ))}
       </div>
     </aside>

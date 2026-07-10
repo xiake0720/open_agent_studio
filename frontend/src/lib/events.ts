@@ -1,4 +1,8 @@
-import type { RunEvent } from '../types'
+import type {
+  PersistedRunEvent,
+  RunEvent,
+} from '../types'
+
 
 export const STREAM_EVENTS = [
   'run.started',
@@ -13,6 +17,25 @@ export const STREAM_EVENTS = [
   'connection.error',
   'client.stop',
 ]
+
+export function persistedToRunEvent(
+  item: PersistedRunEvent,
+): RunEvent {
+  const data =
+    typeof item.payload_json === 'string'
+      ? parseEventData(item.payload_json)
+      : item.payload_json || {}
+
+  return {
+    id: item.id,
+    event:
+      item.event_type ||
+      item.event_name ||
+      'run.item',
+    data,
+    createdAt: new Date(item.created_at).getTime(),
+  }
+}
 
 export function parseEventData(raw: string): Record<string, unknown> {
   if (!raw) return {}

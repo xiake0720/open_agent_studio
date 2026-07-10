@@ -354,6 +354,8 @@ select, input, textarea { color: var(--text); }
 .toast--warning { border-color: color-mix(in srgb, var(--warning) 38%, var(--border)); color: var(--warning); }
 .toast--info { border-color: color-mix(in srgb, var(--info) 38%, var(--border)); color: var(--info); }
 
+
+
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 26%, transparent); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
@@ -373,4 +375,58 @@ select, input, textarea { color: var(--text); }
   .message-row, .message-row--user { grid-template-columns: 38px minmax(0, 1fr); }
   .message-row--user .message-avatar { grid-column: 1; }
   .message-row--user .message-card { grid-column: 2; justify-self: stretch; }
+}
+
+.tool-event-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel-bg);
+}
+
+.tool-event-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tool-event-card__header > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-event-card__header span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tool-event-card__icon {
+  display: inline-flex;
+  color: #f59e0b;
+}
+
+.tool-event-card__body {
+  padding: 12px;
+}
+
+.tool-event-card__body > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tool-event-card__body pre {
+  margin: 0;
+  padding: 10px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

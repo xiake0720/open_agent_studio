@@ -18,12 +18,17 @@ from backend.app.services.agent_run_service import (
     fail_agent_run,
 )
 from backend.app.services.conversation_service import get_conversation
+from backend.app.services.event_normalizer import normalize_stream_event
 from backend.app.services.message_service import create_message
 from backend.app.services.model_config_service import (
     get_default_model_config,
     get_model_config,
 )
 from backend.app.services.model_factory import build_chat_model
+
+from typing import Any
+
+from backend.app.services.run_event_service import create_run_event
 
 GENERAL_AGENT_NAME = "GeneralAgent"
 
@@ -114,8 +119,37 @@ async def stream_agent_run(
 
     start_time = time.perf_counter()
     final_output_parts: list[str] = []
+    event_seq = 0
 
     async with AsyncSessionLocal() as db:
+
+        async def persist_event(
+                event_type: str,
+                data: dict[str, Any],
+                event_name: str | None = None,
+        ) -> str:
+            """
+            保存事件，并返回可直接发送给前端的 SSE 字符串。
+            """
+
+            nonlocal event_seq
+
+            event_seq += 1
+
+            await create_run_event(
+                db=db,
+                run_id=run.id,
+                seq=event_seq,
+                event_type=event_type,
+                event_name=event_name,
+                payload=data,
+            )
+
+            return format_sse_event(
+                event_type,
+                data,
+            )
+
         run = await db.get(AgentRun, run_id)
 
         if run is None:
@@ -150,13 +184,15 @@ async def stream_agent_run(
                 model_settings=built_model.model_settings,
             )
 
-            yield format_sse_event(
-                "run.started",
-                {
-                    "run_id": run.id,
-                    "agent_name": GENERAL_AGENT_NAME,
-                    "model": model_config.model_id,
-                },
+            started_data = {
+                "run_id": run.id,
+                "agent_name": GENERAL_AGENT_NAME,
+                "model": model_config.model_id,
+            }
+
+            yield await persist_event(
+                event_type="run.started",
+                data=started_data,
             )
 
             result = Runner.run_streamed(
@@ -165,38 +201,30 @@ async def stream_agent_run(
             )
 
             async for event in result.stream_events():
-                if event.type == "raw_response_event":
-                    if isinstance(event.data, ResponseTextDeltaEvent):
-                        delta = event.data.delta or ""
+                normalized = normalize_stream_event(
+                    event=event,
+                    run_id=run.id,
+                )
 
-                        if delta:
-                            final_output_parts.append(delta)
+                if normalized is None:
+                    continue
 
-                            yield format_sse_event(
-                                "token.delta",
-                                {
-                                    "run_id": run.id,
-                                    "delta": delta,
-                                },
-                            )
+                if normalized.event_type == "token.delta":
+                    delta = str(normalized.data.get("delta") or "")
 
-                elif event.type == "agent_updated_stream_event":
-                    yield format_sse_event(
-                        "agent.updated",
-                        {
-                            "run_id": run.id,
-                            "agent_name": event.new_agent.name,
-                        },
+                    if delta:
+                        final_output_parts.append(delta)
+
+                if normalized.persist:
+                    yield await persist_event(
+                        event_type=normalized.event_type,
+                        event_name=normalized.event_name,
+                        data=normalized.data,
                     )
-
-                elif event.type == "run_item_stream_event":
+                else:
                     yield format_sse_event(
-                        "run.item",
-                        {
-                            "run_id": run.id,
-                            "name": event.name,
-                            "item_type": event.item.type,
-                        },
+                        normalized.event_type,
+                        normalized.data,
                     )
 
             if result.run_loop_exception:
@@ -223,13 +251,15 @@ async def stream_agent_run(
                 ),
             )
 
-            yield format_sse_event(
-                "run.completed",
-                {
-                    "run_id": run.id,
-                    "final_output": final_output,
-                    "duration_ms": duration_ms,
-                },
+            completed_data = {
+                "run_id": run.id,
+                "final_output": final_output,
+                "duration_ms": duration_ms,
+            }
+
+            yield await persist_event(
+                event_type="run.completed",
+                data=completed_data,
             )
 
         except Exception as exc:
@@ -242,13 +272,15 @@ async def stream_agent_run(
                 duration_ms=duration_ms,
             )
 
-            yield format_sse_event(
-                "run.error",
-                {
-                    "run_id": run.id,
-                    "message": str(exc),
-                    "duration_ms": duration_ms,
-                },
+            error_data = {
+                "run_id": run.id,
+                "message": str(exc),
+                "duration_ms": duration_ms,
+            }
+
+            yield await persist_event(
+                event_type="run.error",
+                data=error_data,
             )
 
 async def resolve_model_config(

@@ -14,11 +14,40 @@ from backend.app.services.agent_service import (
     create_stream_agent_run,
     stream_agent_run,
 )
+from backend.app.services.run_event_service import list_run_events
 
 router = APIRouter(
     prefix="/agent-runs",
     tags=["AgentRuns"],
 )
+
+@router.get("/{run_id}/events")
+async def list_agent_run_events_api(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    查询一次 AgentRun 的完整执行事件。
+    """
+
+    run = await db.get(AgentRun, run_id)
+
+    if run is None:
+        raise AppException(
+            message="Agent运行记录不存在",
+            code=40406,
+            data={"run_id": run_id},
+        )
+
+    events = await list_run_events(
+        db=db,
+        run_id=run_id,
+    )
+
+    return success([
+        event.model_dump(mode="json")
+        for event in events
+    ])
 
 @router.post("")
 async def create_agent_run_api(

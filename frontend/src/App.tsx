@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { api, ApiError, buildStreamUrl, normalizeModel } from './lib/api'
-import { createRunEvent, readString, STREAM_EVENTS } from './lib/events'
+import {
+  createRunEvent,
+  persistedToRunEvent,
+  readString,
+  STREAM_EVENTS,
+} from './lib/events'
 import type { AgentMode, Conversation, Message, NormalizedModel, RunEvent, ThemeMode, Toast as ToastType, ToolCall } from './types'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
@@ -108,11 +113,21 @@ export default function App() {
 
   const loadRunDetails = useCallback(async (runId: string) => {
     try {
-      const [persistedToolCalls] = await Promise.all([
+      const [
+        persistedToolCalls,
+        persistedEvents,
+      ] = await Promise.all([
         api.listToolCalls(runId),
-        api.listRunEvents(runId).catch(() => []),
+        api.listRunEvents(runId),
       ])
+
       setToolCalls(persistedToolCalls)
+
+      if (persistedEvents.length > 0) {
+        setEvents(
+          persistedEvents.map(persistedToRunEvent),
+        )
+      }
     } catch {
       setToolCalls([])
     }
