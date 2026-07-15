@@ -30,6 +30,8 @@ from typing import Any
 
 from backend.app.services.run_event_service import create_run_event
 
+from backend.app.tools import build_general_tools
+
 GENERAL_AGENT_NAME = "GeneralAgent"
 
 def format_sse_event(event: str, data: dict) -> str:
@@ -171,6 +173,8 @@ async def stream_agent_run(
                 model_config_id=run.model_config_id,
             )
 
+            tools = build_general_tools() if model_config.support_tools else []
+
             built_model = build_chat_model(model_config)
 
             agent = Agent(
@@ -179,9 +183,12 @@ async def stream_agent_run(
                     "你是 OpenAgent Studio 中的通用中文助手。"
                     "回答要准确、清晰、结构化。"
                     "如果用户问技术问题，请尽量给出可执行步骤。"
+                    "当用户询问当前时间时，必须调用 get_current_time 工具。"
+                    "当用户询问数学计算时，必须调用 calculator 工具。"
                 ),
                 model=built_model.model,
                 model_settings=built_model.model_settings,
+                tools=tools,
             )
 
             started_data = {
@@ -347,15 +354,20 @@ async def run_general_chat(
     start_time = time.perf_counter()
 
     try:
+        tools = build_general_tools() if model_config.support_tools else []
+
         agent = Agent(
             name=GENERAL_AGENT_NAME,
             instructions=(
                 "你是 OpenAgent Studio 中的通用中文助手。"
                 "回答要准确、清晰、结构化。"
                 "如果用户问技术问题，请尽量给出可执行步骤。"
+                "当用户询问当前时间时，必须调用 get_current_time 工具。"
+                "当用户询问数学计算时，必须调用 calculator 工具。"
             ),
             model=built_model.model,
             model_settings=built_model.model_settings,
+            tools=tools,
         )
 
         result = await Runner.run(
