@@ -57,10 +57,20 @@ def normalize_stream_event(
     item_type = getattr(item, "type", "unknown")
     event_name = getattr(event, "name", None)
 
+    def extract_tool_call_id(raw_item: Any) -> str | None:
+        if not isinstance(raw_item, dict):
+            return None
+
+        for key in ("id", "call_id", "tool_call_id"):
+            value = raw_item.get(key)
+            if isinstance(value, str):
+                return value
+        return None
+
     if item_type == "tool_call_item":
         raw_item = to_jsonable(
-            getattr(item, "raw_item", None)
-        )
+            getattr(item, "raw_item", None))
+
 
         return NormalizedRunEvent(
             event_type="tool.called",
@@ -70,21 +80,20 @@ def normalize_stream_event(
                 "tool_name": extract_tool_name(raw_item),
                 "arguments": extract_tool_arguments(raw_item),
                 "raw_item": raw_item,
+                "tool_call_id": extract_tool_call_id(raw_item),
             },
         )
 
     if item_type == "tool_call_output_item":
+        raw_item = to_jsonable(getattr(item, "raw_item", None))
         return NormalizedRunEvent(
             event_type="tool.output",
             event_name=event_name,
             data={
                 "run_id": run_id,
-                "output": to_jsonable(
-                    getattr(item, "output", None)
-                ),
-                "raw_item": to_jsonable(
-                    getattr(item, "raw_item", None)
-                ),
+                "tool_call_id": extract_tool_call_id(raw_item),
+                "output": to_jsonable(getattr(item, "output", None)),
+                "raw_item": raw_item,
             },
         )
 

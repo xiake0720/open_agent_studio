@@ -31,6 +31,11 @@ from typing import Any
 from backend.app.services.run_event_service import create_run_event
 
 from backend.app.tools import build_general_tools
+from backend.app.models.tool_call import ToolCall
+from backend.app.services.tool_call_service import (
+    complete_tool_call,
+    create_tool_call,
+)
 
 GENERAL_AGENT_NAME = "GeneralAgent"
 
@@ -122,7 +127,7 @@ async def stream_agent_run(
     start_time = time.perf_counter()
     final_output_parts: list[str] = []
     event_seq = 0
-
+    pending_tool_calls: list[tuple[str, float]] = []
     async with AsyncSessionLocal() as db:
 
         async def persist_event(
@@ -212,9 +217,35 @@ async def stream_agent_run(
                     event=event,
                     run_id=run.id,
                 )
-
                 if normalized is None:
                     continue
+
+                if normalized.event_type == "tool.called":
+                    tool_call = await create_tool_call(
+                        db=db,
+                        run_id=run.id,
+                        tool_name=str(normalized.data.get("tool_name") or "unknown_tool"),
+                        arguments=normalized.data.get("arguments"),
+                        sdk_tool_call_id=normalized.data.get("tool_call_id"),
+                        seq=event_seq + 1,
+                    )
+
+                    pending_tool_calls.append(
+                        (tool_call.id, time.perf_counter())
+                    )
+
+                if normalized.event_type == "tool.output":
+                    if pending_tool_calls:
+                        tool_call_id, started_at_perf = pending_tool_calls.pop(0)
+                        tool_call = await db.get(ToolCall, tool_call_id)
+
+                        if tool_call is not None:
+                            await complete_tool_call(
+                                db=db,
+                                tool_call=tool_call,
+                                output=normalized.data.get("output"),
+                                started_at_perf=started_at_perf,
+                            )
 
                 if normalized.event_type == "token.delta":
                     delta = str(normalized.data.get("delta") or "")
