@@ -129,7 +129,7 @@ async def stream_agent_run_api(
 
     await get_owned_run(db, run_id, user.id)
     return StreamingResponse(
-        stream_agent_run(run_id),
+        stream_agent_run(run_id, user.id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

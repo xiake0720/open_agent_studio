@@ -29,6 +29,15 @@ def migrate_legacy_sqlite(sync_conn) -> None:
         text("CREATE INDEX IF NOT EXISTS ix_conversations_user_id ON conversations (user_id)")
     )
 
+    if "messages" in inspector.get_table_names():
+        message_columns = {item["name"] for item in inspector.get_columns("messages")}
+        if "sdk_item_json" not in message_columns:
+            sync_conn.execute(text("ALTER TABLE messages ADD COLUMN sdk_item_json TEXT"))
+        if "is_visible" not in message_columns:
+            sync_conn.execute(
+                text("ALTER TABLE messages ADD COLUMN is_visible BOOLEAN NOT NULL DEFAULT 1")
+            )
+
 
 def ensure_sqlite_dir() -> None:
     """

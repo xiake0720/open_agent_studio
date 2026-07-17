@@ -36,6 +36,7 @@ from backend.app.services.compare_runner import (
     judge_compare_candidates,
     run_compare_candidate,
 )
+from backend.app.services.conversation_session import AppConversationSession
 from backend.app.services.conversation_service import get_conversation
 from backend.app.services.event_normalizer import normalize_stream_event
 from backend.app.services.message_service import create_message
@@ -177,7 +178,7 @@ async def create_stream_agent_run(
     )
 
 
-async def stream_agent_run(run_id: str) -> AsyncGenerator[str, None]:
+async def stream_agent_run(run_id: str, user_id: str) -> AsyncGenerator[str, None]:
     start_time = time.perf_counter()
     event_seq = 0
 
@@ -186,6 +187,14 @@ async def stream_agent_run(run_id: str) -> AsyncGenerator[str, None]:
         if run is None:
             yield format_sse_event("run.error", {"run_id": run_id, "message": "Agent运行记录不存在"})
             return
+
+        session = AppConversationSession(
+            conversation_id=run.conversation_id,
+            user_id=user_id,
+            pending_user_message_id=run.user_message_id,
+            model=run.model,
+            agent_name=run.agent_name,
+        )
 
         async def persist_event(
             event_type: str,
@@ -253,6 +262,7 @@ async def stream_agent_run(run_id: str) -> AsyncGenerator[str, None]:
                         run=run,
                         compare=compare,
                         primary_config=primary_config,
+                        session=session,
                         persist_event=persist_event,
                         start_time=start_time,
                     ):
@@ -268,6 +278,7 @@ async def stream_agent_run(run_id: str) -> AsyncGenerator[str, None]:
                     run=run,
                     compare=compare,
                     primary_config=primary_config,
+                    session=session,
                     persist_event=persist_event,
                     start_time=start_time,
                 ):
@@ -281,6 +292,7 @@ async def stream_agent_run(run_id: str) -> AsyncGenerator[str, None]:
                 run=run,
                 agent=agent,
                 model_config=primary_config,
+                session=session,
                 persist_event=persist_event,
                 start_time=start_time,
             ):
@@ -304,6 +316,7 @@ async def _stream_standard_agent(
     run: AgentRun,
     agent: Agent,
     model_config: ModelConfig,
+    session: AppConversationSession,
     persist_event: Callable[..., Any],
     start_time: float,
 ) -> AsyncGenerator[str, None]:
@@ -311,7 +324,7 @@ async def _stream_standard_agent(
     pending_calls: dict[str, tuple[str, float]] = {}
     pending_without_id: list[tuple[str, float]] = []
 
-    result = Runner.run_streamed(agent, input=run.input_text)
+    result = Runner.run_streamed(agent, input=run.input_text, session=session)
     async for event in result.stream_events():
         normalized = normalize_stream_event(event=event, run_id=run.id)
         if normalized is None:
@@ -366,15 +379,9 @@ async def _stream_standard_agent(
     final_agent_name = result.last_agent.name
     duration_ms = round((time.perf_counter() - start_time) * 1000)
     await complete_agent_run(db=db, run=run, final_output=final_output, duration_ms=duration_ms)
-    await create_message(
-        db=db,
-        conversation_id=run.conversation_id,
-        payload=MessageCreate(
-            role="assistant",
-            content=final_output,
-            model=model_config.model_id,
-            agent_name=final_agent_name,
-        ),
+    await session.annotate_last_assistant(
+        model=model_config.model_id,
+        agent_name=final_agent_name,
     )
     yield await persist_event(
         "run.completed",
@@ -393,9 +400,14 @@ async def _stream_compare_pipeline(
     run: AgentRun,
     compare: ModelCompare,
     primary_config: ModelConfig,
+    session: AppConversationSession,
     persist_event: Callable[..., Any],
     start_time: float,
 ) -> AsyncGenerator[str, None]:
+    history = await session.get_items()
+    current_input = {"role": "user", "content": run.input_text}
+    await session.add_items([current_input])
+    candidate_input = [*history, current_input]
     model_ids = json.loads(compare.model_config_ids_json)
     configs = await resolve_compare_model_configs(db, model_ids)
     await mark_compare_running(db, compare)
@@ -411,7 +423,7 @@ async def _stream_compare_pipeline(
             },
         )
 
-    tasks = [asyncio.create_task(run_compare_candidate(config, run.input_text)) for config in configs]
+    tasks = [asyncio.create_task(run_compare_candidate(config, candidate_input)) for config in configs]
     candidates: list[CandidateOutput] = []
     for task in asyncio.as_completed(tasks):
         candidate = await task
@@ -448,15 +460,10 @@ async def _stream_compare_pipeline(
     final_output = format_judge_markdown(report)
     duration_ms = round((time.perf_counter() - start_time) * 1000)
     await complete_agent_run(db=db, run=run, final_output=final_output, duration_ms=duration_ms)
-    await create_message(
-        db=db,
-        conversation_id=run.conversation_id,
-        payload=MessageCreate(
-            role="assistant",
-            content=final_output,
-            model=primary_config.model_id,
-            agent_name="ModelJudgeAgent",
-        ),
+    await session.add_items([{"role": "assistant", "content": final_output}])
+    await session.annotate_last_assistant(
+        model=primary_config.model_id,
+        agent_name="ModelJudgeAgent",
     )
     yield await persist_event(
         "run.completed",
@@ -493,6 +500,13 @@ async def run_general_chat(db: AsyncSession, payload: ChatRequest, user_id: str)
         payload=MessageCreate(role="user", content=payload.content, model=None, agent_name=None),
         user_id=user_id,
     )
+    session = AppConversationSession(
+        conversation_id=payload.conversation_id,
+        user_id=user_id,
+        pending_user_message_id=user_message.id,
+        model=model_config.model_id,
+        agent_name=agent_name_for_mode(agent_mode),
+    )
     agent_run = await create_agent_run(
         db=db,
         conversation_id=payload.conversation_id,
@@ -513,27 +527,22 @@ async def run_general_chat(db: AsyncSession, payload: ChatRequest, user_id: str)
         else:
             agent = AgentFactory(built_model=built_model).build(agent_mode)
 
-        result = await Runner.run(agent, payload.content)
+        result = await Runner.run(agent, payload.content, session=session)
         final_output = str(result.final_output or "")
         final_agent_name = result.last_agent.name
         duration_ms = round((time.perf_counter() - started) * 1000)
         await complete_agent_run(db, agent_run, final_output, duration_ms)
-        assistant_message = await create_message(
-            db=db,
-            conversation_id=payload.conversation_id,
-            payload=MessageCreate(
-                role="assistant",
-                content=final_output,
-                model=model_config.model_id,
-                agent_name=final_agent_name,
-            ),
-            user_id=user_id,
+        assistant_message_id = await session.annotate_last_assistant(
+            model=model_config.model_id,
+            agent_name=final_agent_name,
         )
+        if assistant_message_id is None:
+            raise RuntimeError("Session 未保存 Agent 助手消息")
         return ChatResponse(
             run_id=agent_run.id,
             conversation_id=payload.conversation_id,
             user_message_id=user_message.id,
-            assistant_message_id=assistant_message.id,
+            assistant_message_id=assistant_message_id,
             model_config_id=model_config.id,
             model=model_config.model_id,
             agent_name=final_agent_name,

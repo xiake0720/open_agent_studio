@@ -3,6 +3,7 @@ import time
 from dataclasses import asdict, dataclass
 
 from agents import Agent, Runner
+from agents.items import TResponseInputItem
 
 from backend.app.agents.contracts import JudgeReport, JudgeScore
 from backend.app.agents.judge_agent import build_judge_agent
@@ -26,7 +27,7 @@ class CandidateOutput:
 
 async def run_compare_candidate(
     model_config: ModelConfig,
-    user_input: str,
+    user_input: str | list[TResponseInputItem],
 ) -> CandidateOutput:
     started = time.perf_counter()
     try:

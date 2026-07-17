@@ -1,6 +1,7 @@
 """可选的 GLM 实际流式冒烟测试；只输出事件名，不输出模型内容或密钥。"""
 
 import asyncio
+import json
 import os
 import sys
 import tempfile
@@ -46,13 +47,18 @@ try:
         ).json()["data"]
 
         event_names: list[str] = []
+        current_event = ""
+        run_error = ""
         with client.stream("GET", run["stream_url"]) as response:
             assert response.status_code == 200, response.text
             for line in response.iter_lines():
                 if line.startswith("event: "):
-                    event_names.append(line.removeprefix("event: "))
+                    current_event = line.removeprefix("event: ")
+                    event_names.append(current_event)
+                elif line.startswith("data: ") and current_event == "run.error":
+                    run_error = str(json.loads(line.removeprefix("data: ")).get("message") or "")
 
-        assert "run.completed" in event_names, event_names
+        assert "run.completed" in event_names, {"events": event_names, "run_error": run_error}
         assert "tool.called" in event_names, event_names
         assert "tool.output" in event_names, event_names
         print("Live GLM smoke passed | events=", ",".join(event_names))

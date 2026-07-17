@@ -33,7 +33,7 @@ export function MessageBubble({ message, streaming }: Props) {
           {message.model ? <span>{message.model}</span> : null}
           {message.agent_name ? <span>{message.agent_name}</span> : null}
           <span>{formatDateTime(message.created_at)}</span>
-          {streaming ? <em>正在生成</em> : null}
+          {streaming ? <em>正在思考</em> : null}
         </div>
         <div className="markdown-body">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content || ' '}</ReactMarkdown>

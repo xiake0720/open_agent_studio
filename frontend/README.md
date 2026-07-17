@@ -1,6 +1,6 @@
 # OpenAgent Studio Frontend
 
-这是 OpenAgent Studio 的正式前端包，基于 React + TypeScript + Vite 构建，已按当前后端 Day10 以及后续规划接口预留。
+这是 OpenAgent Studio 的正式前端包，基于 React + TypeScript + Vite 构建，并与当前后端接口保持兼容。
 
 ## 已适配接口
 
@@ -27,7 +27,7 @@
 - `GET /api/assets`
 - `POST /api/model-compare`
 
-这些预留接口不会影响当前 Day10 运行。不存在时前端会优雅降级。
+这些扩展接口不会影响核心功能运行；暂不可用时，前端会提供稳定的兼容处理。
 
 ## 明暗主题
 
@@ -73,7 +73,7 @@ VITE_BACKEND_URL=http://127.0.0.1:9099
 
 ## 设计说明
 
-本前端不是简单 demo，而是按后续上线准备的工作台结构：
+本前端采用面向正式交付的工作台结构：
 
 - 左侧会话列表、搜索、新建、删除
 - 中间 ChatGPT 风格对话区

@@ -88,7 +88,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
       <section className="auth-intro">
         <div className="auth-brand"><Bot size={30} /> OpenAgent Studio</div>
         <div className="auth-intro__content">
-          <span className="auth-kicker">Agent Workspace</span>
+          <span className="auth-kicker">智能体工作台</span>
           <h1>让每一次智能体协作<br />都有自己的安全空间</h1>
           <p>登录后，你的会话、消息与 Agent 运行记录会按账号隔离保存。</p>
           <div className="auth-points">
@@ -97,7 +97,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
             <span><KeyRound size={18} /> HttpOnly 会话</span>
           </div>
         </div>
-        <small>OpenAgent Studio · Interview Agent Workbench</small>
+        <small>安全、专注的智能体协作空间</small>
       </section>
 
       <main className="auth-panel-wrap">

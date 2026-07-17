@@ -12,6 +12,7 @@ OpenAgent Studio 是一个面向学习、实战和面试展示的多模型智能
 - FastAPI + SQLAlchemy + SQLite 会话、消息、运行、事件和工具调用持久化。
 - 本地用户注册/登录、scrypt 密码哈希、HttpOnly 会话、登录失败验证码和用户数据隔离。
 - AgentRun + SSE 流式输出，统一事件协议和右侧执行时间线。
+- `AppConversationSession` 用现有 `messages` 表实现 Agents SDK Session 协议，支持跨轮记忆、完整工具上下文和旧消息兼容。
 - GeneralAgent、TechAgent、EcommerceAgent 和图片提示词规划 ImageAgent。
 - Auto 模式：结构化 `RouteDecision` + 规则降级，自动识别 general / tech / ecommerce / image / compare。
 - TriageAgent manager 模式：通过 `Agent.as_tool()` 调用专家并保留最终答复控制权。
@@ -27,6 +28,7 @@ OpenAgent Studio 是一个面向学习、实战和面试展示的多模型智能
 - 数据库：SQLite + SQLAlchemy 2.0 + aiosqlite。
 - 模型：GLM 5.1、Qwen、DeepSeek 等 OpenAI-compatible Chat Completions 端点。
 - 流式协议：SSE（EventSource）。
+- 记忆：Agents SDK 自定义 Session Adapter；`messages.sdk_item_json` 保存原始 SDK item，`is_visible` 隔离内部工具记忆与聊天展示。
 
 ## 快速启动
 

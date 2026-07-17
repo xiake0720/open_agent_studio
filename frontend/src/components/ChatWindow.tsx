@@ -16,10 +16,10 @@ type Props = {
 }
 
 const examples = [
-  { icon: <Braces size={18} />, title: '技术报错分析', text: '请解释这个 Python 报错，并给出排查步骤：NameError: name Field is not defined' },
-  { icon: <ShoppingBag size={18} />, title: '电商文案优化', text: '帮我检查这段拼多多文案有没有风险词，并改得更适合转化：全网第一，永久去味，100%有效。' },
-  { icon: <Image size={18} />, title: '图片提示词', text: '帮我写一段 Flux 生图提示词：蓝白清爽风格的智能体工作台产品海报。' },
-  { icon: <Layers3 size={18} />, title: '多模型对比', text: '分别用多个模型回答：FastAPI 的 SSE 流式输出应该怎么设计？' },
+  { icon: <Braces size={18} />, title: '诊断技术问题', text: '分析这段代码存在的问题，并给出清晰的修复步骤。' },
+  { icon: <ShoppingBag size={18} />, title: '优化商品内容', text: '优化这段商品介绍，使表达更清晰、更有说服力，并检查潜在风险。' },
+  { icon: <Image size={18} />, title: '设计视觉方案', text: '为我的产品设计一套简洁、专业的视觉创意方案。' },
+  { icon: <Layers3 size={18} />, title: '比较解决方案', text: '从多个角度分析这个问题，并比较不同解决方案的优缺点。' },
 ]
 
 export function ChatWindow({ messages, draftContent, draftModel, draftAgent, streaming, compareCandidates, judgeReport, compareRunning, onExampleClick }: Props) {
@@ -37,8 +37,8 @@ export function ChatWindow({ messages, draftContent, draftModel, draftAgent, str
     return (
       <div className="welcome">
         <div className="welcome__orb"><Sparkles size={32} /></div>
-        <h2>构建你的多模型 Agent 工作台</h2>
-        <p>这里不是普通聊天壳。你可以观察 Agent 执行过程、切换模型、保留会话历史，并逐步接入工具调用、多 Agent、图片生成和模型评测。</p>
+        <h2>今天想完成什么？</h2>
+        <p>选择适合的智能体与模型，开始一次专注、连续的协作。</p>
         <div className="example-grid">
           {examples.map((item) => (
             <button key={item.title} type="button" onClick={() => onExampleClick(item.text)}>
@@ -48,7 +48,7 @@ export function ChatWindow({ messages, draftContent, draftModel, draftAgent, str
             </button>
           ))}
         </div>
-        <div className="welcome__note"><Wand2 size={15} /> 推荐使用 Auto 测试路由与专家工具，再用 Compare 查看并发回答和 Judge 评分。</div>
+        <div className="welcome__note"><Wand2 size={15} /> 会话会自动保留上下文，你可以随时继续之前的工作。</div>
       </div>
     )
   }

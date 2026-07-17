@@ -21,6 +21,12 @@ export function truncate(text: string, max = 42): string {
   return `${text.slice(0, max)}…`
 }
 
+export function displayConversationTitle(title?: string | null): string {
+  const value = title?.trim() || ''
+  if (!value || (/day\s*\d+/i.test(value) && /测试/.test(value))) return '新会话'
+  return value
+}
+
 export function safeJson(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2)

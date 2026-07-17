@@ -29,7 +29,7 @@ function localMessage(role: 'user' | 'assistant', content: string, model?: strin
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return `${error.message}${error.code ? `（code=${error.code}）` : ''}`
+  if (error instanceof ApiError) return error.message
   if (error instanceof Error) return error.message
   return '未知错误'
 }
@@ -69,6 +69,7 @@ export default function App() {
   const [draftModel, setDraftModel] = useState<string | null>(null)
   const [draftAgent, setDraftAgent] = useState<string | null>('GeneralAgent')
   const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [toast, setToast] = useState<ToastType | null>(null)
 
   const sourceRef = useRef<EventSource | null>(null)
@@ -115,6 +116,13 @@ export default function App() {
     } finally {
       setMessagesLoading(false)
     }
+  }, [])
+
+  const syncCompletedMessages = useCallback(async (conversationId: string) => {
+    const data = await api.listMessages(conversationId)
+    // 同一批更新完成持久化消息替换，避免聊天区进入 loading 或短暂显示重复回答。
+    setMessages(data)
+    setDraftContent('')
   }, [])
 
   const loadRunDetails = useCallback(async (runId: string) => {
@@ -302,14 +310,19 @@ export default function App() {
     appendEvent(createRunEvent('run.completed', JSON.stringify({
       run_id: result.run_id,
       final_output: result.final_output,
-      mode: 'legacy-chat',
+      mode: 'standard-chat',
     })))
     window.setTimeout(() => {
-      setDraftContent('')
-      void loadMessages(conversationId)
+      void (async () => {
+        try {
+          await syncCompletedMessages(conversationId)
+        } catch {
+          // 保留已经显示的完整回答，避免后台同步失败时消息从页面消失。
+        }
+      })()
       void refreshConversations()
     }, 280)
-  }, [appendEvent, loadMessages, refreshConversations, selectedAgentMode, selectedModelId])
+  }, [appendEvent, refreshConversations, selectedAgentMode, selectedModelId, syncCompletedMessages])
 
   const handleCompareModelToggle = useCallback((modelId: string) => {
     setSelectedCompareModelIds((current) => {
@@ -351,7 +364,7 @@ export default function App() {
         })
       } catch (error) {
         if (error instanceof ApiError && (error.status === 404 || error.status === 405 || error.code === 404)) {
-          showToast('warning', '流式接口未就绪，已回退到 /chat', '后端补齐 /api/agent-runs 后会自动使用 SSE。')
+          showToast('info', '已切换为标准响应模式')
           await fallbackChat(conversationId, content)
           return
         }
@@ -413,8 +426,13 @@ export default function App() {
             if (finalOutput) setDraftContent(finalOutput)
             void loadRunDetails(run.run_id)
             window.setTimeout(() => {
-              setDraftContent('')
-              void loadMessages(conversationId)
+              void (async () => {
+                try {
+                  await syncCompletedMessages(conversationId)
+                } catch {
+                  // 保留已经显示的完整回答，避免后台同步失败时消息从页面消失。
+                }
+              })()
               void refreshConversations()
             }, 320)
           }
@@ -443,7 +461,7 @@ export default function App() {
       setDraftContent('')
       showToast('error', '发送失败', errorMessage(error))
     }
-  }, [appendEvent, ensureConversation, fallbackChat, input, loadMessages, loadRunDetails, selectedAgentMode, selectedCompareModelIds, refreshConversations, selectedModelId, showToast, streaming])
+  }, [appendEvent, ensureConversation, fallbackChat, input, loadRunDetails, selectedAgentMode, selectedCompareModelIds, refreshConversations, selectedModelId, showToast, streaming, syncCompletedMessages])
 
   const handleStop = useCallback(() => {
     sourceRef.current?.close()
@@ -503,6 +521,8 @@ export default function App() {
         onCreate={handleCreateConversation}
         onSelect={handleSelectConversation}
         onDelete={handleDeleteConversation}
+        mobileOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
       />
 
       <main className="workspace">
@@ -522,6 +542,7 @@ export default function App() {
           onToggleInspector={() => setInspectorOpen((value) => !value)}
           onToggleTheme={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')}
           onLogout={() => void handleLogout()}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
         />
 
         <div className="chat-area" ref={scrollRef}>

@@ -1,7 +1,7 @@
-import { MessageSquarePlus, Search, Trash2, Sparkles, Wifi, WifiOff } from 'lucide-react'
+import { MessageSquarePlus, Search, Trash2, Sparkles, Wifi, WifiOff, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { Conversation } from '../types'
-import { formatDateTime, truncate } from '../utils/format'
+import { displayConversationTitle, formatDateTime, truncate } from '../utils/format'
 
 type Props = {
   conversations: Conversation[]
@@ -13,13 +13,21 @@ type Props = {
   onCreate: () => void
   onSelect: (id: string) => void
   onDelete: (id: string) => void
+  mobileOpen: boolean
+  onClose: () => void
 }
 
-export function Sidebar({ conversations, activeConversationId, query, connected, loading, onQueryChange, onCreate, onSelect, onDelete }: Props) {
-  const filtered = conversations.filter((item) => item.title.toLowerCase().includes(query.toLowerCase()))
+export function Sidebar({ conversations, activeConversationId, query, connected, loading, onQueryChange, onCreate, onSelect, onDelete, mobileOpen, onClose }: Props) {
+  const filtered = conversations.filter((item) => displayConversationTitle(item.title).toLowerCase().includes(query.toLowerCase()))
 
   return (
-    <aside className="sidebar">
+    <>
+    <button className={`sidebar-backdrop ${mobileOpen ? 'sidebar-backdrop--open' : ''}`} type="button" onClick={onClose} aria-label="关闭会话列表" />
+    <aside className={`sidebar ${mobileOpen ? 'sidebar--mobile-open' : ''}`}>
+      <div className="sidebar__mobile-header">
+        <span>会话</span>
+        <button className="icon-action" type="button" onClick={onClose} aria-label="关闭会话列表"><X size={18} /></button>
+      </div>
       <div className="brand-card">
         <div className="brand-card__mark"><Sparkles size={22} /></div>
         <div>
@@ -28,7 +36,7 @@ export function Sidebar({ conversations, activeConversationId, query, connected,
         </div>
       </div>
 
-      <button className="new-chat-btn" type="button" onClick={onCreate} disabled={loading}>
+      <button className="new-chat-btn" type="button" onClick={() => { onCreate(); onClose() }} disabled={loading}>
         <MessageSquarePlus size={18} /> 新建会话
       </button>
 
@@ -45,10 +53,10 @@ export function Sidebar({ conversations, activeConversationId, query, connected,
             key={item.id}
             className={clsx('conversation-item', item.id === activeConversationId && 'conversation-item--active')}
             type="button"
-            onClick={() => onSelect(item.id)}
+            onClick={() => { onSelect(item.id); onClose() }}
           >
             <span className="conversation-item__main">
-              <span className="conversation-item__title">{truncate(item.title || '新会话', 26)}</span>
+              <span className="conversation-item__title">{truncate(displayConversationTitle(item.title), 26)}</span>
               <span className="conversation-item__meta">{formatDateTime(item.updated_at)} · {item.agent_mode || 'general'}</span>
             </span>
             <span
@@ -70,5 +78,6 @@ export function Sidebar({ conversations, activeConversationId, query, connected,
         <span>{connected ? '后端连接正常' : '后端未连接'}</span>
       </div>
     </aside>
+    </>
   )
 }

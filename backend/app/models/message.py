@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -72,4 +72,18 @@ class Message(Base):
     conversation = relationship(
         "Conversation",
         back_populates="messages",
+    )
+
+    sdk_item_json: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="OpenAI Agents SDK Session 原始 item JSON",
+    )
+
+    is_visible: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+        comment="是否在聊天消息列表中展示；工具和推理 item 仅用于记忆",
     )

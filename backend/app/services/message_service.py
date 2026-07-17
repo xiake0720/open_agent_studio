@@ -28,7 +28,10 @@ async def list_messages(
 
     stmt = (
         select(Message)
-        .where(Message.conversation_id == conversation_id)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.is_visible.is_(True),
+        )
         .order_by(Message.sequence_no.asc(), Message.created_at.asc())
     )
 

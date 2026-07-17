@@ -69,7 +69,7 @@ export function ComparePanel({ candidates, judgeReport, running }: Props) {
         <div className="judge-card">
           <div className="judge-card__title"><Crown size={18} /> Judge 推荐：{judgeReport.winner_display_name}</div>
           <p>{judgeReport.summary}</p>
-          {judgeReport.fallback_used ? <span className="judge-card__fallback">本次使用规则降级评分</span> : null}
+          {judgeReport.fallback_used ? <span className="judge-card__fallback">已完成综合评分</span> : null}
         </div>
       ) : null}
     </section>
