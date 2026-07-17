@@ -4,12 +4,16 @@ import type {
   AgentRunCreateResult,
   ApiEnvelope,
   Asset,
+  AuthResult,
+  AuthUser,
+  CaptchaChallenge,
   ChatRequest,
   ChatResponse,
   Conversation,
   ConversationCreatePayload,
   Message,
   MessageCreatePayload,
+  ModelCompare,
   ModelConfig,
   NormalizedModel,
   PersistedRunEvent,
@@ -51,6 +55,7 @@ async function parseEnvelope<T>(response: Response): Promise<ApiEnvelope<T> | nu
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(toUrl(path), {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {}),
@@ -78,7 +83,12 @@ async function requestOptional<T>(path: string, options: RequestInit = {}, fallb
   try {
     return await request<T>(path, options)
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 404 || error.status === 405 || error.code === 404 || error.code === 40404)) {
+    if (error instanceof ApiError && (
+      error.status === 404 ||
+      error.status === 405 ||
+      error.code === 404 ||
+      (error.code >= 40400 && error.code < 40500)
+    )) {
       return fallback
     }
     throw error
@@ -126,6 +136,32 @@ export function buildStreamUrl(streamUrl: string): string {
 }
 
 export const api = {
+  me(): Promise<AuthUser> {
+    return request<AuthUser>('/auth/me')
+  },
+
+  register(payload: { username: string; password: string; password_confirm: string }): Promise<AuthResult> {
+    return request<AuthResult>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  login(payload: { username: string; password: string; captcha_id?: string; captcha_code?: string }): Promise<AuthResult> {
+    return request<AuthResult>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  logout(): Promise<boolean> {
+    return request<boolean>('/auth/logout', { method: 'POST' })
+  },
+
+  getCaptcha(): Promise<CaptchaChallenge> {
+    return request<CaptchaChallenge>('/auth/captcha')
+  },
+
   health(): Promise<unknown> {
     return requestOptional<unknown>('/health', {}, { ok: true })
   },
@@ -187,6 +223,10 @@ export const api = {
     return requestOptional<ToolCall[]>(`/agent-runs/${runId}/tool-calls`, {}, [])
   },
 
+  getCompareResults(runId: string): Promise<ModelCompare | null> {
+    return requestOptional<ModelCompare | null>(`/agent-runs/${runId}/compare-results`, {}, null)
+  },
+
   chat(payload: ChatRequest): Promise<ChatResponse> {
     return request<ChatResponse>('/chat', {
       method: 'POST',
@@ -206,10 +246,4 @@ export const api = {
     return requestOptional<Asset[]>(`/assets${query}`, {}, [])
   },
 
-  compareModels(payload: { conversation_id: string; content: string; model_config_ids: string[] }): Promise<unknown> {
-    return request<unknown>('/model-compare', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
-  },
 }

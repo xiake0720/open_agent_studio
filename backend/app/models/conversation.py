@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -62,4 +62,12 @@ class Conversation(Base):
         "Message",
         back_populates="conversation",
         cascade="all, delete-orphan",
+    )
+
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="所属用户ID；旧数据迁移期间允许为空",
     )

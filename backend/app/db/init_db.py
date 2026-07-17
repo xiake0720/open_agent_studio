@@ -12,6 +12,24 @@ from backend.app import models  # noqa: F401
 from backend.app.db.seed import seed_model_configs
 
 
+def migrate_legacy_sqlite(sync_conn) -> None:
+    """create_all 不会修改旧表，这里只做当前版本所需的兼容迁移。"""
+    if not settings.DATABASE_URL.startswith("sqlite"):
+        return
+
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(sync_conn)
+    if "conversations" not in inspector.get_table_names():
+        return
+    columns = {item["name"] for item in inspector.get_columns("conversations")}
+    if "user_id" not in columns:
+        sync_conn.execute(text("ALTER TABLE conversations ADD COLUMN user_id VARCHAR(36)"))
+    sync_conn.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_conversations_user_id ON conversations (user_id)")
+    )
+
+
 def ensure_sqlite_dir() -> None:
     """
     确保 SQLite 数据库目录存在。
@@ -34,6 +52,7 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(migrate_legacy_sqlite)
 
     async with AsyncSessionLocal() as db:
         await seed_model_configs(db)

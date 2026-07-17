@@ -7,13 +7,14 @@ import {
   readString,
   STREAM_EVENTS,
 } from './lib/events'
-import type { AgentMode, Conversation, Message, NormalizedModel, RunEvent, ThemeMode, Toast as ToastType, ToolCall } from './types'
+import type { AgentMode, AuthResult, AuthUser, CompareCandidate, Conversation, JudgeReport, Message, NormalizedModel, RunEvent, ThemeMode, Toast as ToastType, ToolCall } from './types'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { ChatWindow } from './components/ChatWindow'
 import { Composer } from './components/Composer'
 import { Inspector } from './components/Inspector'
 import { Toast } from './components/Toast'
+import { AuthScreen } from './components/AuthScreen'
 
 function localMessage(role: 'user' | 'assistant', content: string, model?: string | null, agentName?: string | null): Message {
   return {
@@ -41,6 +42,8 @@ function readTheme(): ThemeMode {
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => readTheme())
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(true)
   const [messagesLoading, setMessagesLoading] = useState(false)
@@ -50,10 +53,13 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [models, setModels] = useState<NormalizedModel[]>([])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
+  const [compareCandidates, setCompareCandidates] = useState<CompareCandidate[]>([])
+  const [judgeReport, setJudgeReport] = useState<JudgeReport | null>(null)
 
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [selectedAgentMode, setSelectedAgentMode] = useState<AgentMode>('general')
+  const [selectedCompareModelIds, setSelectedCompareModelIds] = useState<string[]>([])
   const [sidebarQuery, setSidebarQuery] = useState('')
   const [input, setInput] = useState('')
 
@@ -113,12 +119,10 @@ export default function App() {
 
   const loadRunDetails = useCallback(async (runId: string) => {
     try {
-      const [
-        persistedToolCalls,
-        persistedEvents,
-      ] = await Promise.all([
+      const [persistedToolCalls, persistedEvents, persistedCompare] = await Promise.all([
         api.listToolCalls(runId),
         api.listRunEvents(runId),
+        api.getCompareResults(runId),
       ])
 
       setToolCalls(persistedToolCalls)
@@ -127,6 +131,10 @@ export default function App() {
         setEvents(
           persistedEvents.map(persistedToRunEvent),
         )
+      }
+      if (persistedCompare) {
+        setCompareCandidates(persistedCompare.results)
+        setJudgeReport(persistedCompare.judge_report || null)
       }
     } catch {
       setToolCalls([])
@@ -146,6 +154,12 @@ export default function App() {
       setConversations(conversationData)
       setModels(modelData)
       setSelectedModelId(modelData.find((item) => item.enabled && item.supportStreaming)?.id || modelData[0]?.id || null)
+      setSelectedCompareModelIds(
+        modelData
+          .filter((item) => item.enabled && item.apiShape === 'chat_completions')
+          .slice(0, 2)
+          .map((item) => item.id),
+      )
 
       const firstConversation = conversationData[0]
       if (firstConversation) {
@@ -163,9 +177,32 @@ export default function App() {
   }, [loadMessages, showToast])
 
   useEffect(() => {
-    void bootstrap()
-    return () => sourceRef.current?.close()
-  }, [bootstrap])
+    let cancelled = false
+    const restoreSession = async () => {
+      setAuthLoading(true)
+      try {
+        const user = await api.me()
+        if (cancelled) return
+        setCurrentUser(user)
+        await bootstrap()
+      } catch (error) {
+        if (cancelled) return
+        setCurrentUser(null)
+        setConnected(false)
+        setLoading(false)
+        if (!(error instanceof ApiError && (error.status === 401 || error.code === 40100))) {
+          showToast('error', '认证服务连接失败', errorMessage(error))
+        }
+      } finally {
+        if (!cancelled) setAuthLoading(false)
+      }
+    }
+    void restoreSession()
+    return () => {
+      cancelled = true
+      sourceRef.current?.close()
+    }
+  }, [bootstrap, showToast])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -177,7 +214,7 @@ export default function App() {
     try {
       const conversation = await api.createConversation({
         title: '新会话',
-        agent_mode: selectedAgentMode === 'auto' ? 'general' : selectedAgentMode,
+        agent_mode: selectedAgentMode,
         default_model: selectedModelId,
       })
       const data = await refreshConversations()
@@ -185,6 +222,8 @@ export default function App() {
       setMessages([])
       setEvents([])
       setToolCalls([])
+      setCompareCandidates([])
+      setJudgeReport(null)
       setDraftContent('')
       setActiveRunId(null)
       const created = data.find((item) => item.id === conversation.id)
@@ -203,6 +242,8 @@ export default function App() {
     setDraftContent('')
     setEvents([])
     setToolCalls([])
+    setCompareCandidates([])
+    setJudgeReport(null)
     setActiveRunId(null)
     const conversation = conversations.find((item) => item.id === id)
     if (conversation?.agent_mode) setSelectedAgentMode(conversation.agent_mode as AgentMode)
@@ -225,6 +266,8 @@ export default function App() {
         setMessages([])
         setEvents([])
         setToolCalls([])
+        setCompareCandidates([])
+        setJudgeReport(null)
         if (next) await loadMessages(next.id)
       }
       showToast('success', '会话已删除')
@@ -237,7 +280,7 @@ export default function App() {
     if (activeConversationId) return activeConversationId
     const conversation = await api.createConversation({
       title: content.slice(0, 32) || '新会话',
-      agent_mode: selectedAgentMode === 'auto' ? 'general' : selectedAgentMode,
+      agent_mode: selectedAgentMode,
       default_model: selectedModelId,
     })
     await refreshConversations()
@@ -246,7 +289,12 @@ export default function App() {
   }, [activeConversationId, refreshConversations, selectedAgentMode, selectedModelId])
 
   const fallbackChat = useCallback(async (conversationId: string, content: string) => {
-    const result = await api.chat({ conversation_id: conversationId, content, model_config_id: selectedModelId })
+    const result = await api.chat({
+      conversation_id: conversationId,
+      content,
+      primary_model_id: selectedModelId,
+      agent_mode: selectedAgentMode,
+    })
     setDraftContent(result.final_output)
     setDraftModel(result.model)
     setDraftAgent(result.agent_name)
@@ -261,7 +309,15 @@ export default function App() {
       void loadMessages(conversationId)
       void refreshConversations()
     }, 280)
-  }, [appendEvent, loadMessages, refreshConversations, selectedModelId])
+  }, [appendEvent, loadMessages, refreshConversations, selectedAgentMode, selectedModelId])
+
+  const handleCompareModelToggle = useCallback((modelId: string) => {
+    setSelectedCompareModelIds((current) => {
+      if (current.includes(modelId)) return current.filter((item) => item !== modelId)
+      if (current.length >= 3) return current
+      return [...current, modelId]
+    })
+  }, [])
 
   const handleSend = useCallback(async () => {
     const content = input.trim()
@@ -271,6 +327,14 @@ export default function App() {
     setDraftContent('')
     setEvents([])
     setToolCalls([])
+    setCompareCandidates([])
+    setJudgeReport(null)
+
+    if (selectedAgentMode === 'compare' && (selectedCompareModelIds.length < 2 || selectedCompareModelIds.length > 3)) {
+      showToast('warning', '请选择 2-3 个模型', 'Compare 模式会并发运行所选模型，然后由 JudgeAgent 评分。')
+      setInput(content)
+      return
+    }
 
     try {
       const conversationId = await ensureConversation(content)
@@ -281,7 +345,9 @@ export default function App() {
         run = await api.createAgentRun({
           conversation_id: conversationId,
           content,
-          model_config_id: selectedModelId || null,
+          primary_model_id: selectedModelId || null,
+          agent_mode: selectedAgentMode,
+          compare_model_ids: selectedAgentMode === 'compare' ? selectedCompareModelIds : [],
         })
       } catch (error) {
         if (error instanceof ApiError && (error.status === 404 || error.status === 405 || error.code === 404)) {
@@ -299,7 +365,7 @@ export default function App() {
       setConnected(true)
 
       const streamUrl = buildStreamUrl(run.stream_url)
-      const source = new EventSource(streamUrl)
+      const source = new EventSource(streamUrl, { withCredentials: true })
       sourceRef.current = source
 
       STREAM_EVENTS.forEach((eventName) => {
@@ -315,6 +381,28 @@ export default function App() {
           if (eventName === 'agent.updated') {
             const agentName = readString(event.data, 'agent_name')
             if (agentName) setDraftAgent(agentName)
+          }
+
+          if (eventName === 'compare.model.started') {
+            const candidate = event.data as unknown as CompareCandidate
+            setCompareCandidates((current) => {
+              if (current.some((item) => item.model_config_id === candidate.model_config_id)) return current
+              return [...current, { ...candidate, status: 'running' }]
+            })
+          }
+
+          if (eventName === 'compare.model.completed' || eventName === 'compare.model.failed') {
+            const candidate = event.data as unknown as CompareCandidate
+            setCompareCandidates((current) => {
+              const exists = current.some((item) => item.model_config_id === candidate.model_config_id)
+              if (!exists) return [...current, candidate]
+              return current.map((item) => item.model_config_id === candidate.model_config_id ? candidate : item)
+            })
+          }
+
+          if (eventName === 'judge.completed') {
+            setJudgeReport(event.data as unknown as JudgeReport)
+            setDraftAgent('ModelJudgeAgent')
           }
 
           if (eventName === 'run.completed') {
@@ -355,7 +443,7 @@ export default function App() {
       setDraftContent('')
       showToast('error', '发送失败', errorMessage(error))
     }
-  }, [appendEvent, ensureConversation, fallbackChat, input, loadMessages, loadRunDetails, refreshConversations, selectedModelId, showToast, streaming])
+  }, [appendEvent, ensureConversation, fallbackChat, input, loadMessages, loadRunDetails, selectedAgentMode, selectedCompareModelIds, refreshConversations, selectedModelId, showToast, streaming])
 
   const handleStop = useCallback(() => {
     sourceRef.current?.close()
@@ -365,6 +453,43 @@ export default function App() {
   }, [appendEvent])
 
   const handleExampleClick = useCallback((text: string) => setInput(text), [])
+
+  const handleAuthenticated = useCallback(async (result: AuthResult) => {
+    setCurrentUser(result.user)
+    setConnected(false)
+    await bootstrap()
+    showToast('success', `欢迎，${result.user.username}`)
+  }, [bootstrap, showToast])
+
+  const handleLogout = useCallback(async () => {
+    sourceRef.current?.close()
+    sourceRef.current = null
+    try {
+      await api.logout()
+    } catch {
+      // 即使服务端会话已过期，也要立即清理当前界面状态。
+    }
+    setCurrentUser(null)
+    setConnected(false)
+    setStreaming(false)
+    setConversations([])
+    setMessages([])
+    setEvents([])
+    setToolCalls([])
+    setCompareCandidates([])
+    setJudgeReport(null)
+    setActiveConversationId(null)
+    setActiveRunId(null)
+    setDraftContent('')
+  }, [])
+
+  if (authLoading) {
+    return <div className="auth-loading"><Loader2 className="spin" size={26} /><span>正在验证登录状态…</span></div>
+  }
+
+  if (!currentUser) {
+    return <AuthScreen onAuthenticated={handleAuthenticated} />
+  }
 
   return (
     <div className={`app-shell ${inspectorOpen ? 'app-shell--with-inspector' : ''}`}>
@@ -386,13 +511,17 @@ export default function App() {
           models={models}
           selectedModelId={selectedModelId}
           selectedAgentMode={selectedAgentMode}
+          selectedCompareModelIds={selectedCompareModelIds}
           inspectorOpen={inspectorOpen}
           streaming={streaming}
           theme={theme}
+          user={currentUser}
           onModelChange={setSelectedModelId}
           onAgentModeChange={setSelectedAgentMode}
+          onCompareModelToggle={handleCompareModelToggle}
           onToggleInspector={() => setInspectorOpen((value) => !value)}
           onToggleTheme={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')}
+          onLogout={() => void handleLogout()}
         />
 
         <div className="chat-area" ref={scrollRef}>
@@ -405,6 +534,9 @@ export default function App() {
               draftModel={draftModel || selectedModel?.modelId}
               draftAgent={draftAgent}
               streaming={streaming}
+              compareCandidates={compareCandidates}
+              judgeReport={judgeReport}
+              compareRunning={streaming && compareCandidates.some((item) => item.status === 'running')}
               onExampleClick={handleExampleClick}
             />
           )}

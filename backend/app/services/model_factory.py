@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass
 from json import JSONDecodeError
 
-from typing import  Any
+from typing import Any
 
 from openai import AsyncOpenAI
 from agents import (
@@ -39,7 +39,7 @@ class BuiltModel:
     model_settings: ModelSettings
     config: ModelConfig
 
-def parse_extra_body(extra_body_json: str | None) -> dict[str, Any]:
+def parse_extra_body(extra_body_json: str | None) -> dict[str, Any] | None:
     """
     解析model_config.extra_body_json.
 

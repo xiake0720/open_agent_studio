@@ -4,6 +4,10 @@ from backend.app.models.model_config import ModelConfig
 from backend.app.models.agent_run import AgentRun
 from backend.app.models.run_event import RunEvent
 from backend.app.models.tool_call import ToolCall
+from backend.app.models.model_compare import ModelCompare, ModelCompareResult
+from backend.app.models.user import User
+from backend.app.models.auth_session import AuthSession
+from backend.app.models.login_challenge import LoginChallenge
 
 __all__ = [
     "Conversation",
@@ -12,4 +16,9 @@ __all__ = [
     "AgentRun",
     "RunEvent",
     "ToolCall",
+    "ModelCompare",
+    "ModelCompareResult",
+    "User",
+    "AuthSession",
+    "LoginChallenge",
 ]

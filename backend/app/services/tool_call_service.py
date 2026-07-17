@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -61,6 +62,7 @@ async def complete_tool_call(
 ) -> ToolCall:
     tool_call.output = dump_json(output)
     tool_call.status = "success"
+    tool_call.finished_at = datetime.now(timezone.utc)
 
     if started_at_perf is not None:
         tool_call.duration_ms = round((time.perf_counter() - started_at_perf) * 1000)

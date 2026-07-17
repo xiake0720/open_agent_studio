@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.db.session import get_db
+from backend.app.api.dependencies import get_current_user
+from backend.app.models.user import User
 from backend.app.schemas.message import MessageCreate, MessageResponse
 from backend.app.schemas.response import success
 from backend.app.services.message_service import (
@@ -19,6 +21,7 @@ router = APIRouter(
 async def list_messages_api(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     查询某个会话下的消息列表。
@@ -29,6 +32,7 @@ async def list_messages_api(
     messages = await list_messages(
         db=db,
         conversation_id=conversation_id,
+        user_id=user.id,
     )
 
     data = [
@@ -44,6 +48,7 @@ async def create_message_api(
     conversation_id: str,
     payload: MessageCreate,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     创建消息。
@@ -56,6 +61,7 @@ async def create_message_api(
         db=db,
         conversation_id=conversation_id,
         payload=payload,
+        user_id=user.id,
     )
 
     return success(

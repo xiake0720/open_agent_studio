@@ -8,6 +8,7 @@ from backend.app.schemas.conversation import ConversationCreate
 async def create_conversation(
     db: AsyncSession,
     payload: ConversationCreate,
+    user_id: str,
 ) -> Conversation:
     """
     创建会话。
@@ -16,6 +17,7 @@ async def create_conversation(
         title=payload.title,
         agent_mode=payload.agent_mode,
         default_model=payload.default_model,
+        user_id=user_id,
     )
     db.add(conversation)
     await db.commit()
@@ -25,6 +27,7 @@ async def create_conversation(
 
 async def list_conversations(
     db: AsyncSession,
+    user_id: str,
 ) -> list[Conversation]:
     """
     查询会话列表。
@@ -34,6 +37,7 @@ async def list_conversations(
 
     stmt = (
         select(Conversation)
+        .where(Conversation.user_id == user_id)
         .order_by(desc(Conversation.updated_at))
     )
 
@@ -43,6 +47,7 @@ async def list_conversations(
 async def get_conversation(
     db: AsyncSession,
     conversation_id: str,
+    user_id: str | None = None,
 ) -> Conversation:
     """
     查询单个会话。
@@ -50,7 +55,10 @@ async def get_conversation(
     如果不存在，抛出业务异常。
     """
 
-    conversation = await db.get(Conversation, conversation_id)
+    stmt = select(Conversation).where(Conversation.id == conversation_id)
+    if user_id is not None:
+        stmt = stmt.where(Conversation.user_id == user_id)
+    conversation = await db.scalar(stmt)
 
     if conversation is None:
         raise AppException(
@@ -65,6 +73,7 @@ async def get_conversation(
 async def delete_conversation(
     db: AsyncSession,
     conversation_id: str,
+    user_id: str,
 ) -> None:
     """
     删除会话。
@@ -73,7 +82,7 @@ async def delete_conversation(
     后续删除会话时，对应消息也会一起删除。
     """
 
-    conversation = await get_conversation(db, conversation_id)
+    conversation = await get_conversation(db, conversation_id, user_id)
 
     await db.delete(conversation)
     await db.commit()

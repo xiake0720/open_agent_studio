@@ -10,6 +10,7 @@ from backend.app.services.conversation_service import get_conversation
 async def list_messages(
         db: AsyncSession,
         conversation_id: str,
+        user_id: str | None = None,
 ) -> list[Message]:
     """
     查询某个会话下的消息列表。
@@ -22,6 +23,7 @@ async def list_messages(
     await get_conversation(
         db=db,
         conversation_id=conversation_id,
+        user_id=user_id,
     )
 
     stmt = (
@@ -63,6 +65,7 @@ async def create_message(
         db: AsyncSession,
         conversation_id: str,
         payload: MessageCreate,
+        user_id: str | None = None,
 ) -> Message:
     """
     创建一条消息。
@@ -72,6 +75,7 @@ async def create_message(
     await get_conversation(
         db=db,
         conversation_id=conversation_id,
+        user_id=user_id,
     )
 
     sequence_no = await get_next_sequence_no(

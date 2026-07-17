@@ -1,6 +1,6 @@
-import { Activity, Bot, Braces, Eye, EyeOff, Image, Layers3, Route, ShoppingBag, Wrench } from 'lucide-react'
+import { Activity, Bot, Braces, Eye, EyeOff, Image, Layers3, LogOut, Route, ShoppingBag, UserRound, Wrench } from 'lucide-react'
 import type { ReactNode } from 'react'
-import type { AgentMode, Conversation, NormalizedModel, ThemeMode } from '../types'
+import type { AgentMode, AuthUser, Conversation, NormalizedModel, ThemeMode } from '../types'
 import { ThemeToggle } from './ThemeToggle'
 
 const AGENT_OPTIONS: Array<{ value: AgentMode; label: string; icon: ReactNode; note: string }> = [
@@ -8,7 +8,7 @@ const AGENT_OPTIONS: Array<{ value: AgentMode; label: string; icon: ReactNode; n
   { value: 'general', label: '通用助手', icon: <Bot size={15} />, note: 'General' },
   { value: 'tech', label: '技术助手', icon: <Braces size={15} />, note: 'Day23' },
   { value: 'ecommerce', label: '电商运营', icon: <ShoppingBag size={15} />, note: 'Day24' },
-  { value: 'image', label: '图片生成', icon: <Image size={15} />, note: 'Day31' },
+  { value: 'image', label: '图片策划', icon: <Image size={15} />, note: 'Prompt' },
   { value: 'compare', label: '模型对比', icon: <Layers3 size={15} />, note: 'Day28' },
 ]
 
@@ -17,16 +17,20 @@ type Props = {
   models: NormalizedModel[]
   selectedModelId: string | null
   selectedAgentMode: AgentMode
+  selectedCompareModelIds: string[]
   inspectorOpen: boolean
   streaming: boolean
   theme: ThemeMode
+  user: AuthUser
   onModelChange: (value: string | null) => void
   onAgentModeChange: (value: AgentMode) => void
+  onCompareModelToggle: (modelId: string) => void
   onToggleInspector: () => void
   onToggleTheme: () => void
+  onLogout: () => void
 }
 
-export function TopBar({ conversation, models, selectedModelId, selectedAgentMode, inspectorOpen, streaming, theme, onModelChange, onAgentModeChange, onToggleInspector, onToggleTheme }: Props) {
+export function TopBar({ conversation, models, selectedModelId, selectedAgentMode, selectedCompareModelIds, inspectorOpen, streaming, theme, user, onModelChange, onAgentModeChange, onCompareModelToggle, onToggleInspector, onToggleTheme, onLogout }: Props) {
   const selectedModel = models.find((item) => item.id === selectedModelId) || null
 
   return (
@@ -62,10 +66,39 @@ export function TopBar({ conversation, models, selectedModelId, selectedAgentMod
 
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
 
+        <div className="user-menu" title={`当前账号：${user.username}`}>
+          <UserRound size={16} />
+          <span>{user.username}</span>
+          <button type="button" onClick={onLogout} title="退出登录"><LogOut size={16} /></button>
+        </div>
+
         <button className="icon-action" type="button" onClick={onToggleInspector} title="切换执行面板">
           {inspectorOpen ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
+
+      {selectedAgentMode === 'compare' ? (
+        <div className="compare-model-picker">
+          <span>并发模型（选择 2-3 个）</span>
+          <div>
+            {models.filter((item) => item.enabled && item.apiShape === 'chat_completions').map((item) => {
+              const checked = selectedCompareModelIds.includes(item.id)
+              const disabled = !checked && selectedCompareModelIds.length >= 3
+              return (
+                <label key={item.id} className={checked ? 'model-check model-check--selected' : 'model-check'}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => onCompareModelToggle(item.id)}
+                  />
+                  {item.displayName}
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
     </header>
   )
 }

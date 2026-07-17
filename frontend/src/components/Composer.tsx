@@ -22,7 +22,7 @@ export function Composer({ value, disabled, streaming, onChange, onSend, onStop 
 
   return (
     <footer className="composer-wrap">
-      <div className="composer-hint"><Zap size={14} /> Enter 发送，Shift + Enter 换行。Day10 当前使用 AgentRun + SSE 流式接口。</div>
+      <div className="composer-hint"><Zap size={14} /> Enter 发送，Shift + Enter 换行。Auto 可自动分流，Compare 可并发评测 2-3 个模型。</div>
       <div className="composer">
         <textarea
           ref={ref}

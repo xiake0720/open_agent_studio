@@ -27,10 +27,12 @@ class AppException(Exception):
         message: str,
         code: int = 400,
         data: Optional[Any] = None,
+        status_code: int = 200,
     ) -> None:
         self.message = message
         self.code = code
         self.data = data
+        self.status_code = status_code
         super().__init__(message)
 
 
@@ -46,7 +48,7 @@ async def app_exception_handler(
     )
 
     return JSONResponse(
-        status_code=200,
+        status_code=exc.status_code,
         content=fail(
             code=exc.code,
             message=exc.message,

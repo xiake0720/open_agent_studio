@@ -30,8 +30,17 @@ async def list_models_api(
     )
 
     data = [
-        # ModelConfigResponse.model_validate(item).model_dump(mode="json")
-        {"id": item.id, "name": item.display_name}
+        {
+            "id": item.id,
+            "provider": item.provider,
+            "display_name": item.display_name,
+            "model_id": item.model_id,
+            "api_shape": item.api_shape,
+            "support_streaming": item.support_streaming,
+            "support_tools": item.support_tools,
+            "support_image": item.support_image,
+            "enabled": item.enabled,
+        }
         for item in model_configs
     ]
 

@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+from backend.app.agents.modes import AgentMode
 
 class AgentRunResponse(BaseModel):
     id: str
@@ -31,9 +33,19 @@ class AgentRunCreateRequest(BaseModel):
 
     conversation_id: str = Field(description="会话ID")
     content: str = Field(min_length=1, description="用户输入内容")
-    model_config_id: str | None = Field(
+    primary_model_id: str | None = Field(
         default=None,
+        validation_alias=AliasChoices("primary_model_id", "model_config_id"),
         description="模型配置ID。不传则使用会话默认模型或系统默认模型。",
+    )
+    agent_mode: AgentMode | None = Field(
+        default=None,
+        description="本次运行使用的 Agent 模式。不传则使用会话默认模式。",
+    )
+    compare_model_ids: list[str] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Compare 模式选择的 2-3 个模型配置ID。",
     )
 
 

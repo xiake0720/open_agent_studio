@@ -6,6 +6,23 @@ export type ApiEnvelope<T> = {
 
 export type ThemeMode = 'dark' | 'light'
 
+export type AuthUser = {
+  id: string
+  username: string
+  created_at: string
+}
+
+export type AuthResult = {
+  user: AuthUser
+  expires_at: string
+}
+
+export type CaptchaChallenge = {
+  captcha_id: string
+  image_data_uri: string
+  expires_in: number
+}
+
 export type AgentMode = 'auto' | 'general' | 'tech' | 'ecommerce' | 'image' | 'compare'
 
 export type Conversation = {
@@ -73,7 +90,9 @@ export type NormalizedModel = {
 export type AgentRunCreatePayload = {
   conversation_id: string
   content: string
-  model_config_id?: string | null
+  primary_model_id?: string | null
+  agent_mode?: AgentMode | null
+  compare_model_ids?: string[]
 }
 
 export type AgentRunCreateResult = {
@@ -134,7 +153,8 @@ export type ToolCall = {
 export type ChatRequest = {
   conversation_id: string
   content: string
-  model_config_id?: string | null
+  primary_model_id?: string | null
+  agent_mode?: AgentMode | null
 }
 
 export type ChatResponse = {
@@ -165,4 +185,46 @@ export type Asset = {
   file_path?: string | null
   url?: string | null
   created_at?: string | null
+}
+
+export type CompareCandidate = {
+  model_config_id: string
+  display_name: string
+  model_id: string
+  status: 'running' | 'completed' | 'failed' | string
+  output_text?: string | null
+  error_message?: string | null
+  duration_ms?: number | null
+}
+
+export type JudgeScore = {
+  model_config_id: string
+  display_name: string
+  accuracy: number
+  structure: number
+  actionability: number
+  expression: number
+  recommendation: number
+  total: number
+  strengths: string[]
+  weaknesses: string[]
+}
+
+export type JudgeReport = {
+  winner_model_config_id: string
+  winner_display_name: string
+  scores: JudgeScore[]
+  summary: string
+  fallback_used?: boolean
+}
+
+export type ModelCompare = {
+  id: string
+  run_id: string
+  model_config_ids: string[]
+  status: string
+  winner_model_config_id?: string | null
+  judge_report?: JudgeReport | null
+  results: CompareCandidate[]
+  created_at: string
 }

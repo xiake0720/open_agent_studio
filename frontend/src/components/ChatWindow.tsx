@@ -1,6 +1,7 @@
 import { ArrowRight, Braces, Image, Layers3, Sparkles, ShoppingBag, Wand2 } from 'lucide-react'
-import type { Message } from '../types'
+import type { CompareCandidate, JudgeReport, Message } from '../types'
 import { MessageBubble } from './MessageBubble'
+import { ComparePanel } from './ComparePanel'
 
 type Props = {
   messages: Message[]
@@ -8,6 +9,9 @@ type Props = {
   draftModel?: string | null
   draftAgent?: string | null
   streaming: boolean
+  compareCandidates: CompareCandidate[]
+  judgeReport: JudgeReport | null
+  compareRunning: boolean
   onExampleClick: (text: string) => void
 }
 
@@ -18,8 +22,8 @@ const examples = [
   { icon: <Layers3 size={18} />, title: '多模型对比', text: '分别用多个模型回答：FastAPI 的 SSE 流式输出应该怎么设计？' },
 ]
 
-export function ChatWindow({ messages, draftContent, draftModel, draftAgent, streaming, onExampleClick }: Props) {
-  const draftMessage: Message | null = draftContent || streaming ? {
+export function ChatWindow({ messages, draftContent, draftModel, draftAgent, streaming, compareCandidates, judgeReport, compareRunning, onExampleClick }: Props) {
+  const draftMessage: Message | null = (draftContent || streaming) && compareCandidates.length === 0 ? {
     id: 'draft-assistant',
     conversation_id: 'draft',
     role: 'assistant',
@@ -29,7 +33,7 @@ export function ChatWindow({ messages, draftContent, draftModel, draftAgent, str
     created_at: new Date().toISOString(),
   } : null
 
-  if (messages.length === 0 && !draftMessage) {
+  if (messages.length === 0 && !draftMessage && compareCandidates.length === 0) {
     return (
       <div className="welcome">
         <div className="welcome__orb"><Sparkles size={32} /></div>
@@ -44,7 +48,7 @@ export function ChatWindow({ messages, draftContent, draftModel, draftAgent, str
             </button>
           ))}
         </div>
-        <div className="welcome__note"><Wand2 size={15} /> 推荐先测试 Day10：创建 AgentRun，然后通过 SSE 查看 token.delta。</div>
+        <div className="welcome__note"><Wand2 size={15} /> 推荐使用 Auto 测试路由与专家工具，再用 Compare 查看并发回答和 Judge 评分。</div>
       </div>
     )
   }
@@ -53,6 +57,7 @@ export function ChatWindow({ messages, draftContent, draftModel, draftAgent, str
     <div className="message-list">
       {messages.map((item) => <MessageBubble key={item.id} message={item} />)}
       {draftMessage ? <MessageBubble message={draftMessage} streaming={streaming} /> : null}
+      <ComparePanel candidates={compareCandidates} judgeReport={judgeReport} running={compareRunning} />
     </div>
   )
 }
