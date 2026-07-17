@@ -9,7 +9,7 @@ from backend.app.db.session import AsyncSessionLocal, engine
 from backend.app import models  # noqa: F401
 
 
-from backend.app.db.seed import seed_model_configs
+from backend.app.db.seed import seed_admin_user, seed_model_configs
 
 
 def migrate_legacy_sqlite(sync_conn) -> None:
@@ -38,6 +38,15 @@ def migrate_legacy_sqlite(sync_conn) -> None:
                 text("ALTER TABLE messages ADD COLUMN is_visible BOOLEAN NOT NULL DEFAULT 1")
             )
 
+    if "users" in inspector.get_table_names():
+        user_columns = {item["name"] for item in inspector.get_columns("users")}
+        if "is_admin" not in user_columns:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+        if "is_active" not in user_columns:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
+        if "last_login_at" not in user_columns:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN last_login_at DATETIME"))
+
 
 def ensure_sqlite_dir() -> None:
     """
@@ -65,5 +74,6 @@ async def init_db() -> None:
 
     async with AsyncSessionLocal() as db:
         await seed_model_configs(db)
+        await seed_admin_user(db)
 
     logger.info("数据库初始化完成 | url=%s", settings.DATABASE_URL)

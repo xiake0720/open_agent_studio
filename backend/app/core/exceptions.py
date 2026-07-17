@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import Any, Optional
 
 from fastapi import FastAPI, Request
@@ -7,8 +8,40 @@ from fastapi.responses import JSONResponse
 
 from backend.app.core.config import settings
 from backend.app.schemas.response import fail
+from backend.app.db.session import AsyncSessionLocal
+from backend.app.services.system_exception_service import record_system_exception
 
 logger = logging.getLogger("open_agent_studio")
+
+
+async def persist_request_exception(
+    request: Request,
+    *,
+    message: str,
+    category: str,
+    level: str,
+    status_code: int,
+    error_code: int | None = None,
+    detail: Any = None,
+    traceback_text: str | None = None,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as db:
+            await record_system_exception(
+                db,
+                message=message,
+                category=category,
+                level=level,
+                method=request.method,
+                path=request.url.path,
+                status_code=status_code,
+                error_code=error_code,
+                detail=detail,
+                traceback_text=traceback_text,
+                user_id=getattr(request.state, "user_id", None),
+            )
+    except Exception:
+        logger.exception("异常记录写入数据库失败")
 
 
 class AppException(Exception):
@@ -46,6 +79,16 @@ async def app_exception_handler(
         exc.code,
         exc.message,
     )
+    if exc.status_code >= 500:
+        await persist_request_exception(
+            request,
+            message=exc.message,
+            category="business",
+            level="error",
+            status_code=exc.status_code,
+            error_code=exc.code,
+            detail=exc.data,
+        )
 
     return JSONResponse(
         status_code=exc.status_code,
@@ -66,7 +109,6 @@ async def validation_exception_handler(
         request.url.path,
         exc.errors(),
     )
-
     return JSONResponse(
         status_code=422,
         content=fail(
@@ -85,6 +127,15 @@ async def global_exception_handler(
         "系统异常 | path=%s | error=%s",
         request.url.path,
         str(exc),
+    )
+    await persist_request_exception(
+        request,
+        message=str(exc),
+        category="system",
+        level="error",
+        status_code=500,
+        error_code=500,
+        traceback_text="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
     )
 
     message = str(exc) if settings.APP_DEBUG else "服务器内部错误"

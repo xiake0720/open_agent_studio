@@ -9,6 +9,7 @@ from backend.app.agents.contracts import JudgeReport, JudgeScore
 from backend.app.agents.judge_agent import build_judge_agent
 from backend.app.models.model_config import ModelConfig
 from backend.app.services.model_factory import build_chat_model
+from backend.app.services.token_usage_service import extract_token_usage
 
 
 @dataclass(slots=True)
@@ -20,6 +21,9 @@ class CandidateOutput:
     output_text: str | None
     error_message: str | None
     duration_ms: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
 
     def to_event_data(self) -> dict:
         return asdict(self)
@@ -45,6 +49,7 @@ async def run_compare_candidate(
             candidate_agent,
             user_input,
         )
+        input_tokens, output_tokens, total_tokens = extract_token_usage(result)
         return CandidateOutput(
             model_config_id=model_config.id,
             display_name=model_config.display_name,
@@ -53,6 +58,9 @@ async def run_compare_candidate(
             output_text=str(result.final_output or ""),
             error_message=None,
             duration_ms=round((time.perf_counter() - started) * 1000),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
         )
     except Exception as exc:
         return CandidateOutput(
@@ -63,6 +71,9 @@ async def run_compare_candidate(
             output_text=None,
             error_message=str(exc),
             duration_ms=round((time.perf_counter() - started) * 1000),
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
         )
 
 
@@ -112,7 +123,7 @@ async def judge_compare_candidates(
     judge_model_config: ModelConfig,
     user_input: str,
     candidates: list[CandidateOutput],
-) -> JudgeReport:
+) -> tuple[JudgeReport, tuple[int, int, int]]:
     successful = [item for item in candidates if item.status == "completed" and item.output_text]
     if not successful:
         raise ValueError("没有可供评审的成功模型回答")
@@ -130,6 +141,7 @@ async def judge_compare_candidates(
         ],
     }
 
+    usage = (0, 0, 0)
     try:
         built_model = build_chat_model(judge_model_config)
         result = await Runner.run(
@@ -137,15 +149,16 @@ async def judge_compare_candidates(
             json.dumps(payload, ensure_ascii=False),
             max_turns=2,
         )
+        usage = extract_token_usage(result)
         report = result.final_output
         if isinstance(report, JudgeReport):
             allowed_ids = {item.model_config_id for item in successful}
             if report.winner_model_config_id in allowed_ids:
-                return report
+                return report, usage
     except Exception:
         pass
 
-    return fallback_judge_report(candidates)
+    return fallback_judge_report(candidates), usage
 
 
 def format_judge_markdown(report: JudgeReport) -> str:

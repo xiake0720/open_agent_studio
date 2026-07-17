@@ -90,6 +90,8 @@ async def create_session(db: AsyncSession, user: User) -> tuple[str, AuthSession
 
 async def register_user(db: AsyncSession, username: str, password: str) -> tuple[User, str, AuthSession]:
     key = username_key(username)
+    if key == username_key(settings.DEFAULT_ADMIN_USERNAME):
+        raise AppException("该用户名为管理员保留账号", code=40902, status_code=409)
     existing = await db.scalar(select(User.id).where(User.username_key == key))
     if existing is not None:
         raise AppException("用户名已被注册", code=40901, status_code=409)
@@ -200,7 +202,11 @@ async def authenticate_user(
             status_code=401,
         )
 
+    if not user.is_active:
+        raise AppException("账号已停用，请联系管理员", code=40301, status_code=403)
+
     user.failed_login_attempts = 0
+    user.last_login_at = utcnow()
     await db.commit()
     token, session = await create_session(db, user)
     return user, token, session
@@ -219,6 +225,10 @@ async def get_user_by_session_token(db: AsyncSession, token: str | None) -> User
     if row is None:
         return None
     user, session = row
+    if not user.is_active:
+        await db.delete(session)
+        await db.commit()
+        return None
     if session.expires_at <= utcnow():
         await db.delete(session)
         await db.commit()

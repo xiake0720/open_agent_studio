@@ -228,3 +228,92 @@ export type ModelCompare = {
   results: CompareCandidate[]
   created_at: string
 }
+
+export type AdminUser = {
+  id: string
+  username: string
+  is_admin: true
+}
+
+export type AdminOverview = {
+  users: number
+  active_users: number
+  conversations: number
+  runs: number
+  failed_runs: number
+  total_tokens: number
+  unresolved_exceptions: number
+}
+
+export type AdminManagedUser = {
+  id: string
+  username: string
+  is_active: boolean
+  failed_login_attempts: number
+  conversation_count: number
+  last_login_at?: string | null
+  created_at: string
+}
+
+export type AdminModel = {
+  id: string
+  provider: string
+  display_name: string
+  model_id: string
+  base_url: string
+  api_key_env: string
+  api_shape: string
+  support_streaming: boolean
+  support_tools: boolean
+  support_image: boolean
+  enabled: boolean
+  extra_body_json?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AdminModelPayload = Omit<AdminModel, 'id' | 'created_at' | 'updated_at'>
+
+export type AdminTokenStats = {
+  date_from: string
+  date_to: string
+  summary: { input_tokens: number; output_tokens: number; total_tokens: number }
+  by_model: Array<{ model: string; input_tokens: number; output_tokens: number; total_tokens: number; requests: number }>
+  by_time: Array<{ date: string; input_tokens: number; output_tokens: number; total_tokens: number }>
+}
+
+export type AdminConversation = {
+  id: string
+  title: string
+  username: string
+  user_id?: string | null
+  agent_mode: string
+  default_model?: string | null
+  message_count: number
+  run_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type AdminConversationDetail = {
+  conversation: Pick<AdminConversation, 'id' | 'title' | 'agent_mode' | 'default_model' | 'created_at'>
+  messages: Message[]
+}
+
+export type AdminException = {
+  id: string
+  level: string
+  category: string
+  method?: string | null
+  path?: string | null
+  status_code?: number | null
+  error_code?: number | null
+  message: string
+  detail?: string | null
+  traceback?: string | null
+  user_id?: string | null
+  run_id?: string | null
+  resolved: boolean
+  resolved_at?: string | null
+  created_at: string
+}

@@ -49,9 +49,13 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     AUTH_COOKIE_NAME: str = "oas_session"
+    ADMIN_AUTH_COOKIE_NAME: str = "oas_admin_session"
     AUTH_SESSION_DAYS: int = 7
     LOGIN_CAPTCHA_AFTER_FAILURES: int = 3
     LOGIN_CAPTCHA_TTL_SECONDS: int = 300
+
+    DEFAULT_ADMIN_USERNAME: str = "admin"
+    DEFAULT_ADMIN_PASSWORD: str = "OpenAgent@2026!"
 
     model_config = SettingsConfigDict(
         env_file=".env",

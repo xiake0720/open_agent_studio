@@ -56,6 +56,8 @@ from backend.app.services.model_config_service import (
 from backend.app.services.model_factory import build_chat_model
 from backend.app.services.run_event_service import create_run_event
 from backend.app.services.tool_call_service import complete_tool_call, create_tool_call
+from backend.app.services.token_usage_service import extract_token_usage, record_token_usage
+from backend.app.services.system_exception_service import record_system_exception
 
 
 def format_sse_event(event: str, data: dict) -> str:
@@ -301,6 +303,15 @@ async def stream_agent_run(run_id: str, user_id: str) -> AsyncGenerator[str, Non
         except Exception as exc:
             duration_ms = round((time.perf_counter() - start_time) * 1000)
             await fail_agent_run(db=db, run=run, error_message=str(exc), duration_ms=duration_ms)
+            await record_system_exception(
+                db,
+                message=str(exc),
+                category="agent_run",
+                level="error",
+                run_id=run.id,
+                user_id=user_id,
+                detail={"model": run.model, "agent_name": run.agent_name},
+            )
             compare = await get_model_compare(db, run.id)
             if compare is not None and compare.status != "completed":
                 await fail_model_compare(db, compare)
@@ -379,6 +390,14 @@ async def _stream_standard_agent(
     final_agent_name = result.last_agent.name
     duration_ms = round((time.perf_counter() - start_time) * 1000)
     await complete_agent_run(db=db, run=run, final_output=final_output, duration_ms=duration_ms)
+    await record_token_usage(
+        db,
+        run_id=run.id,
+        model_config_id=model_config.id,
+        model=model_config.model_id,
+        usage_type="agent",
+        usage=extract_token_usage(result),
+    )
     await session.annotate_last_assistant(
         model=model_config.model_id,
         agent_name=final_agent_name,
@@ -439,6 +458,14 @@ async def _stream_compare_pipeline(
             error_message=candidate.error_message,
             duration_ms=candidate.duration_ms,
         )
+        await record_token_usage(
+            db,
+            run_id=run.id,
+            model_config_id=candidate.model_config_id,
+            model=candidate.model_id,
+            usage_type="compare_candidate",
+            usage=(candidate.input_tokens, candidate.output_tokens, candidate.total_tokens),
+        )
         event_type = "compare.model.completed" if candidate.status == "completed" else "compare.model.failed"
         yield await persist_event(event_type, {"run_id": run.id, **candidate.to_event_data()})
 
@@ -449,7 +476,7 @@ async def _stream_compare_pipeline(
         "judge.started",
         {"run_id": run.id, "agent_name": "ModelJudgeAgent", "candidate_count": len(candidates)},
     )
-    report = await judge_compare_candidates(primary_config, run.input_text, candidates)
+    report, judge_usage = await judge_compare_candidates(primary_config, run.input_text, candidates)
     report_data = report.model_dump(mode="json")
     compare = await get_model_compare(db, run.id)
     if compare is None:
@@ -460,6 +487,14 @@ async def _stream_compare_pipeline(
     final_output = format_judge_markdown(report)
     duration_ms = round((time.perf_counter() - start_time) * 1000)
     await complete_agent_run(db=db, run=run, final_output=final_output, duration_ms=duration_ms)
+    await record_token_usage(
+        db,
+        run_id=run.id,
+        model_config_id=primary_config.id,
+        model=primary_config.model_id,
+        usage_type="judge",
+        usage=judge_usage,
+    )
     await session.add_items([{"role": "assistant", "content": final_output}])
     await session.annotate_last_assistant(
         model=primary_config.model_id,
@@ -532,6 +567,14 @@ async def run_general_chat(db: AsyncSession, payload: ChatRequest, user_id: str)
         final_agent_name = result.last_agent.name
         duration_ms = round((time.perf_counter() - started) * 1000)
         await complete_agent_run(db, agent_run, final_output, duration_ms)
+        await record_token_usage(
+            db,
+            run_id=agent_run.id,
+            model_config_id=model_config.id,
+            model=model_config.model_id,
+            usage_type="agent",
+            usage=extract_token_usage(result),
+        )
         assistant_message_id = await session.annotate_last_assistant(
             model=model_config.model_id,
             agent_name=final_agent_name,
@@ -551,4 +594,13 @@ async def run_general_chat(db: AsyncSession, payload: ChatRequest, user_id: str)
     except Exception as exc:
         duration_ms = round((time.perf_counter() - started) * 1000)
         await fail_agent_run(db, agent_run, str(exc), duration_ms)
+        await record_system_exception(
+            db,
+            message=str(exc),
+            category="agent_run",
+            level="error",
+            run_id=agent_run.id,
+            user_id=user_id,
+            detail={"model": agent_run.model, "agent_name": agent_run.agent_name},
+        )
         raise

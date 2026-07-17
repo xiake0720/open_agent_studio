@@ -18,6 +18,15 @@ import type {
   NormalizedModel,
   PersistedRunEvent,
   ToolCall,
+  AdminConversation,
+  AdminConversationDetail,
+  AdminException,
+  AdminManagedUser,
+  AdminModel,
+  AdminModelPayload,
+  AdminOverview,
+  AdminTokenStats,
+  AdminUser,
 } from '../types'
 
 const DEFAULT_API_BASE = '/api'
@@ -246,4 +255,52 @@ export const api = {
     return requestOptional<Asset[]>(`/assets${query}`, {}, [])
   },
 
+}
+
+export const adminApi = {
+  login(payload: { username: string; password: string }): Promise<{ user: AdminUser; expires_at: string }> {
+    return request('/admin/auth/login', { method: 'POST', body: JSON.stringify(payload) })
+  },
+  me(): Promise<AdminUser> {
+    return request('/admin/auth/me')
+  },
+  logout(): Promise<boolean> {
+    return request('/admin/auth/logout', { method: 'POST' })
+  },
+  overview(): Promise<AdminOverview> {
+    return request('/admin/overview')
+  },
+  users(query = ''): Promise<AdminManagedUser[]> {
+    return request(`/admin/users?query=${encodeURIComponent(query)}`)
+  },
+  updateUser(userId: string, isActive: boolean): Promise<{ id: string; is_active: boolean }> {
+    return request(`/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) })
+  },
+  tokenStats(dateFrom?: string, dateTo?: string): Promise<AdminTokenStats> {
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    return request(`/admin/token-stats${params.size ? `?${params}` : ''}`)
+  },
+  models(): Promise<AdminModel[]> {
+    return request('/admin/models')
+  },
+  createModel(payload: AdminModelPayload): Promise<AdminModel> {
+    return request('/admin/models', { method: 'POST', body: JSON.stringify(payload) })
+  },
+  updateModel(modelId: string, payload: AdminModelPayload): Promise<AdminModel> {
+    return request(`/admin/models/${modelId}`, { method: 'PUT', body: JSON.stringify(payload) })
+  },
+  conversations(query = ''): Promise<AdminConversation[]> {
+    return request(`/admin/conversations?query=${encodeURIComponent(query)}`)
+  },
+  conversation(conversationId: string): Promise<AdminConversationDetail> {
+    return request(`/admin/conversations/${conversationId}`)
+  },
+  exceptions(resolved?: boolean): Promise<AdminException[]> {
+    return request(`/admin/exceptions${resolved === undefined ? '' : `?resolved=${resolved}`}`)
+  },
+  updateException(exceptionId: string, resolved: boolean): Promise<{ id: string; resolved: boolean }> {
+    return request(`/admin/exceptions/${exceptionId}`, { method: 'PATCH', body: JSON.stringify({ resolved }) })
+  },
 }

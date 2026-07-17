@@ -3,6 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.logging import logger
 from backend.app.models.model_config import ModelConfig
+from backend.app.models.user import User
+from backend.app.core.config import settings
+from backend.app.services.auth_service import hash_password, username_key
 
 
 DEFAULT_MODEL_CONFIGS = [
@@ -59,6 +62,26 @@ DEFAULT_MODEL_CONFIGS = [
         "extra_body_json": None,
     },
 ]
+
+
+async def seed_admin_user(db: AsyncSession) -> None:
+    key = username_key(settings.DEFAULT_ADMIN_USERNAME)
+    existing = await db.scalar(select(User).where(User.username_key == key))
+    if existing is not None:
+        if not existing.is_admin:
+            logger.warning("默认管理员用户名已被普通用户占用，未自动提升权限 | username=%s", existing.username)
+        return
+
+    admin = User(
+        username=settings.DEFAULT_ADMIN_USERNAME.strip(),
+        username_key=key,
+        password_hash=hash_password(settings.DEFAULT_ADMIN_PASSWORD),
+        is_admin=True,
+        is_active=True,
+    )
+    db.add(admin)
+    await db.commit()
+    logger.info("默认管理员已初始化 | username=%s", admin.username)
 
 
 async def seed_model_configs(db: AsyncSession) -> None:
