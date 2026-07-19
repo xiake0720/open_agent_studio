@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from backend.app.core.config import settings
+from alembic import command
+from alembic.config import Config
+
+from backend.app.core.config import BASE_DIR, settings
 from backend.app.core.logging import logger
 from backend.app.db.base import Base
 from backend.app.db.session import AsyncSessionLocal, engine
@@ -12,40 +15,10 @@ from backend.app import models  # noqa: F401
 from backend.app.db.seed import seed_admin_user, seed_model_configs
 
 
-def migrate_legacy_sqlite(sync_conn) -> None:
-    """create_all 不会修改旧表，这里只做当前版本所需的兼容迁移。"""
-    if not settings.DATABASE_URL.startswith("sqlite"):
-        return
-
-    from sqlalchemy import inspect, text
-
-    inspector = inspect(sync_conn)
-    if "conversations" not in inspector.get_table_names():
-        return
-    columns = {item["name"] for item in inspector.get_columns("conversations")}
-    if "user_id" not in columns:
-        sync_conn.execute(text("ALTER TABLE conversations ADD COLUMN user_id VARCHAR(36)"))
-    sync_conn.execute(
-        text("CREATE INDEX IF NOT EXISTS ix_conversations_user_id ON conversations (user_id)")
-    )
-
-    if "messages" in inspector.get_table_names():
-        message_columns = {item["name"] for item in inspector.get_columns("messages")}
-        if "sdk_item_json" not in message_columns:
-            sync_conn.execute(text("ALTER TABLE messages ADD COLUMN sdk_item_json TEXT"))
-        if "is_visible" not in message_columns:
-            sync_conn.execute(
-                text("ALTER TABLE messages ADD COLUMN is_visible BOOLEAN NOT NULL DEFAULT 1")
-            )
-
-    if "users" in inspector.get_table_names():
-        user_columns = {item["name"] for item in inspector.get_columns("users")}
-        if "is_admin" not in user_columns:
-            sync_conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
-        if "is_active" not in user_columns:
-            sync_conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
-        if "last_login_at" not in user_columns:
-            sync_conn.execute(text("ALTER TABLE users ADD COLUMN last_login_at DATETIME"))
+def run_alembic_upgrade(sync_conn) -> None:
+    config = Config(str(BASE_DIR / "alembic.ini"))
+    config.attributes["connection"] = sync_conn
+    command.upgrade(config, "head")
 
 
 def ensure_sqlite_dir() -> None:
@@ -63,14 +36,13 @@ async def init_db() -> None:
     """
     初始化数据库。
 
-    Day 3 阶段先使用 create_all。
-    后续如果表结构复杂起来，再引入 Alembic 做迁移。
+    create_all 只负责补齐全新或缺失的表；字段升级由 Alembic 管理。
     """
     ensure_sqlite_dir()
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(migrate_legacy_sqlite)
+        await conn.run_sync(run_alembic_upgrade)
 
     async with AsyncSessionLocal() as db:
         await seed_model_configs(db)

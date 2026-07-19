@@ -3,6 +3,7 @@ import unittest
 
 from backend.app.agents.contracts import JudgeScore
 from backend.app.agents.ecommerce_agent import build_ecommerce_agent
+from backend.app.agents.image_agent import build_image_agent
 from backend.app.agents.routing import fallback_route_decision
 from backend.app.agents.triage_agent import build_triage_agent
 from backend.app.models.model_config import ModelConfig
@@ -79,6 +80,10 @@ class AgentConstructionTests(unittest.TestCase):
         agent = build_triage_agent(self.built_model, decision)
         names = {tool.name for tool in agent.tools}
         self.assertTrue({"ask_tech_expert", "ask_ecommerce_expert", "ask_image_expert"}.issubset(names))
+
+    def test_image_agent_has_nvidia_flux_tool(self) -> None:
+        agent = build_image_agent(self.built_model)
+        self.assertIn("generate_flux_image", [tool.name for tool in agent.tools])
 
 
 class JudgeFallbackTests(unittest.TestCase):

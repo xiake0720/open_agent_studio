@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from backend.app.agents.modes import AgentMode
+from backend.app.core.agent_run_status import AgentRunStatus
 
 class AgentRunResponse(BaseModel):
     id: str
@@ -11,12 +12,18 @@ class AgentRunResponse(BaseModel):
     model_config_id: str | None = None
     agent_name: str
     model: str
-    status: str
+    status: AgentRunStatus
     input_text: str
     final_output: str | None = None
     error_message: str | None = None
     duration_ms: int | None = None
-    started_at: datetime
+    execution_id: str | None = None
+    claimed_at: datetime | None = None
+    cancel_requested_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    partial_output: str | None = None
+    version: int
+    started_at: datetime | None = None
     finished_at: datetime | None = None
     created_at: datetime
 
@@ -56,4 +63,13 @@ class AgentRunCreateResponse(BaseModel):
     model_config_id: str
     model: str
     agent_name: str
+    status: AgentRunStatus
     stream_url: str
+
+
+class AgentRunCancelResponse(BaseModel):
+    run_id: str
+    status: AgentRunStatus
+    cancel_requested_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    idempotent: bool = False

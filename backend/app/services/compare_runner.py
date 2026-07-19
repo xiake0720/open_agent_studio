@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from agents import Agent, Runner
 from agents.items import TResponseInputItem
 
+from backend.app.agents.context import AppRunContext
 from backend.app.agents.contracts import JudgeReport, JudgeScore
 from backend.app.agents.judge_agent import build_judge_agent
 from backend.app.models.model_config import ModelConfig
@@ -21,9 +22,9 @@ class CandidateOutput:
     output_text: str | None
     error_message: str | None
     duration_ms: int
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
     def to_event_data(self) -> dict:
         return asdict(self)
@@ -32,6 +33,7 @@ class CandidateOutput:
 async def run_compare_candidate(
     model_config: ModelConfig,
     user_input: str | list[TResponseInputItem],
+    context: AppRunContext,
 ) -> CandidateOutput:
     started = time.perf_counter()
     try:
@@ -48,6 +50,7 @@ async def run_compare_candidate(
         result = await Runner.run(
             candidate_agent,
             user_input,
+            context=context,
         )
         input_tokens, output_tokens, total_tokens = extract_token_usage(result)
         return CandidateOutput(
@@ -123,6 +126,7 @@ async def judge_compare_candidates(
     judge_model_config: ModelConfig,
     user_input: str,
     candidates: list[CandidateOutput],
+    context: AppRunContext,
 ) -> tuple[JudgeReport, tuple[int, int, int]]:
     successful = [item for item in candidates if item.status == "completed" and item.output_text]
     if not successful:
@@ -147,6 +151,7 @@ async def judge_compare_candidates(
         result = await Runner.run(
             build_judge_agent(built_model),
             json.dumps(payload, ensure_ascii=False),
+            context=context,
             max_turns=2,
         )
         usage = extract_token_usage(result)

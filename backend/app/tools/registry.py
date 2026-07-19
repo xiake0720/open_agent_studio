@@ -6,6 +6,7 @@ from backend.app.tools.basic_tools import (
     explain_error_signature,
     get_current_time,
 )
+from backend.app.tools.image_tools import generate_flux_image
 
 
 def build_general_tools() -> list[FunctionTool]:
@@ -38,3 +39,7 @@ def build_ecommerce_tools() -> list[FunctionTool]:
     return [
         check_sensitive_words,
     ]
+
+
+def build_image_tools() -> list[FunctionTool]:
+    return [generate_flux_image]

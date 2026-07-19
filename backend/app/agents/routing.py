@@ -1,5 +1,6 @@
 from agents import Runner
 
+from backend.app.agents.context import AppRunContext
 from backend.app.agents.contracts import RouteDecision
 from backend.app.agents.triage_agent import build_route_decision_agent
 from backend.app.services.model_factory import BuiltModel
@@ -65,6 +66,7 @@ def fallback_route_decision(user_input: str) -> RouteDecision:
 async def resolve_route_decision(
     built_model: BuiltModel,
     user_input: str,
+    context: AppRunContext,
 ) -> tuple[RouteDecision, str]:
     """优先由结构化 Triage Agent 路由，失败时使用可解释的规则降级。"""
 
@@ -72,6 +74,7 @@ async def resolve_route_decision(
         result = await Runner.run(
             build_route_decision_agent(built_model),
             user_input,
+            context=context,
             max_turns=2,
         )
         if isinstance(result.final_output, RouteDecision):

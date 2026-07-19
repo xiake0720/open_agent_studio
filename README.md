@@ -11,9 +11,9 @@ OpenAgent Studio 是一个面向学习、实战和面试展示的多模型智能
 - React + TypeScript + Vite 三栏工作台，支持深浅主题和 Markdown。
 - FastAPI + SQLAlchemy + SQLite 会话、消息、运行、事件和工具调用持久化。
 - 本地用户注册/登录、scrypt 密码哈希、HttpOnly 会话、登录失败验证码和用户数据隔离。
-- AgentRun + SSE 流式输出，统一事件协议和右侧执行时间线。
+- AgentRun 明确状态机、原子领取、服务端取消与超时控制；SSE 支持事件 ID、断线回放和部分输出恢复。
 - `AppConversationSession` 用现有 `messages` 表实现 Agents SDK Session 协议，支持跨轮记忆、完整工具上下文和旧消息兼容。
-- GeneralAgent、TechAgent、EcommerceAgent 和图片提示词规划 ImageAgent。
+- GeneralAgent、TechAgent、EcommerceAgent 和接入 NVIDIA FLUX.2-klein-4b 生图工具的 ImageAgent。
 - Auto 模式：结构化 `RouteDecision` + 规则降级，自动识别 general / tech / ecommerce / image / compare。
 - TriageAgent manager 模式：通过 `Agent.as_tool()` 调用专家并保留最终答复控制权。
 - 模型选择器：从 `/api/models` 加载安全的模型能力信息，请求通过 `primary_model_id` 指定模型，消息记录实际模型。
@@ -41,12 +41,19 @@ OpenAgent Studio 是一个面向学习、实战和面试展示的多模型智能
 - `GLM_API_KEY`：GLM 5.1。
 - `NVIDIA_KEY`：NVIDIA API 上配置的 Qwen / DeepSeek 模型。
 
+运行控制可选配置：
+
+- `AGENT_RUN_TIMEOUT_SECONDS=120`：普通、Auto 与 Compare 顶层运行超时。
+- `AGENT_TOKEN_CHUNK_CHARS=256`：流式文本累计多少字符后持久化一个 `token.chunk`。
+- `AGENT_TOKEN_CHUNK_SECONDS=1`：即使字符数未达到阈值，也按该时间间隔保存部分输出。
+
 如使用其他 OpenAI-compatible 服务，请调整 `backend/app/db/seed.py`，或直接维护 `model_configs` 表中的端点和模型能力。
 
 ### 2. 启动后端
 
 ```powershell
 uv sync
+uv run alembic upgrade head
 uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 9099
 ```
 
@@ -78,9 +85,62 @@ npm run dev
 | GET | `/api/conversations/{id}/messages` | 回看消息 |
 | POST | `/api/agent-runs` | 创建普通、Auto 或 Compare 运行 |
 | GET | `/api/agent-runs/{id}/stream` | SSE 执行与事件推送 |
+| POST | `/api/agent-runs/{id}/cancel` | 取消 pending/running 运行 |
 | GET | `/api/agent-runs/{id}/events` | 回放运行时间线 |
 | GET | `/api/agent-runs/{id}/tool-calls` | 查询工具调用审计 |
 | GET | `/api/agent-runs/{id}/compare-results` | 查询模型对比和 Judge 结果 |
+| GET | `/api/generated/{run_id}/{filename}` | 读取当前用户拥有 Run 生成的图片 |
+
+## AgentRun 状态机与断线恢复
+
+创建运行只写入 `pending`。首个 SSE 连接使用带 `status = pending` 条件的 SQL UPDATE 原子领取，并写入唯一 `execution_id`、`claimed_at`、`started_at` 后进入 `running`。其他连接只能订阅同一个运行，不会再次调用模型或工具。
+
+状态转换如下：
+
+```text
+pending -> running -> completed
+pending/running -> failed | cancelled | timeout | interrupted
+```
+
+所有终态都有 `finished_at`。取消会记录 `cancel_requested_at` 与 `cancelled_at`；超时和取消均保留 `partial_output`。服务重启或旧库升级时无法证明仍在执行的历史 `running` 会标记为 `interrupted`，不会自动重跑。
+
+所有 SSE 事件包含 `id:`，持久化事件使用 `run_events.seq`。客户端的 `Last-Event-ID` 只回放更大的序号。实时 `token.delta` 不逐字写 SQLite，而是按字符/时间聚合为 `token.chunk` 并同步更新 `agent_runs.partial_output`；重连时会收到 `run.snapshot` 恢复已生成文本。
+
+## NVIDIA FLUX 生图
+
+ImageAgent 和 Auto 路由到图片专家时可调用 `generate_flux_image`。工具使用环境变量 `NVIDIA_KEY` 请求：
+
+```text
+https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b
+```
+
+默认参数为 1024×1024、seed 0、steps 4。返回的 `artifacts[0].base64` 保存到本地 `data/generated/`，并通过需要登录且校验 Run 所有权的 URL 读取。API Key 不进入数据库、`AppRunContext`、事件或工具输出。
+
+## 数据库迁移
+
+项目使用异步 SQLAlchemy + Alembic，SQLite 变更使用 batch mode。`init_db` 只补齐缺失表、运行 Alembic 和种子数据，不再维护复杂手写 ALTER TABLE。
+
+全新数据库初始化（Windows PowerShell）：
+
+```powershell
+uv sync
+uv run alembic upgrade head
+```
+
+旧数据库升级前建议先复制 `data/open_agent_studio.db` 作为备份，然后执行：
+
+```powershell
+Copy-Item .\data\open_agent_studio.db .\data\open_agent_studio.db.bak
+uv run alembic upgrade head
+```
+
+回滚最近一次状态机迁移：
+
+```powershell
+uv run alembic downgrade -1
+```
+
+回滚会把 `pending` 映射为旧版 `running`，把 `cancelled/timeout/interrupted` 映射为旧版 `failed`，不会删除用户、会话、消息、Token Usage 或运行记录。
 
 创建 Compare Run 示例：
 
@@ -103,12 +163,14 @@ Auto 模式先由 `TriageRouteAgent` 返回结构化 `RouteDecision`。Tech、Ec
 ## 验证命令
 
 ```powershell
-# 后端语法和 Day 24-30 回归测试
-.\.venv\Scripts\python.exe -m compileall -q backend
-.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
+# 后端迁移、语法和回归测试
+uv run alembic upgrade head
+uv run python -m compileall -q backend
+uv run python -m unittest discover -s backend/tests -v
 
 # 前端类型检查与生产构建
 cd frontend
+npm install
 npm run build
 ```
 
@@ -122,4 +184,4 @@ npm run build
 
 ## 后续扩展
 
-Day 31 以后可继续接入真实 FLUX 图片生成与资产画廊、Guardrails、Human-in-the-loop 审批、服务端取消、Docker 部署和统一评估集。当前 ImageAgent 只负责图片方案和提示词，不会声称已经生成图片。
+后续可继续扩展持久化 RunState 的 Human-in-the-loop 审批、多进程任务队列、对象存储资产画廊、Docker 部署和统一评估集。`AppRunContext` 只包含可序列化的用户/会话/Run/模型/模式/权限/语言信息，为后续 HITL 序列化保留兼容性。

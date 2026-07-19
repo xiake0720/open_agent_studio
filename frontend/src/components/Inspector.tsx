@@ -1,6 +1,6 @@
 import { Activity, Bot, CheckCircle2, Clock, Copy, Database, ListTree, Terminal, Trash2, XCircle } from 'lucide-react'
 import clsx from 'clsx'
-import type { RunEvent, ToolCall } from '../types'
+import type { AgentRunStatus, RunEvent, ToolCall } from '../types'
 import { formatDuration, safeJson } from '../utils/format'
 import { ToolEventCard } from './ToolEventCard'
 
@@ -11,6 +11,8 @@ type Props = {
   tokenCount: number
   model?: string | null
   agentName?: string | null
+  runStatus?: AgentRunStatus | null
+  cancelledAt?: string | null
   persistedToolCalls: ToolCall[]
   onClear: () => void
 }
@@ -31,10 +33,12 @@ function EventIcon({ event }: { event: string }) {
   return <ListTree size={16} />
 }
 
-export function Inspector({ events, activeRunId, streaming, tokenCount, model, agentName, persistedToolCalls, onClear }: Props) {
+export function Inspector({ events, activeRunId, streaming, tokenCount, model, agentName, runStatus, cancelledAt, persistedToolCalls, onClear }: Props) {
   const started = events.find((item) => item.event === 'run.started')
-  const completed = [...events].reverse().find((item) => item.event === 'run.completed')
-  const duration = typeof completed?.data.duration_ms === 'number' ? completed.data.duration_ms : undefined
+  const terminal = [...events].reverse().find((item) => [
+    'run.completed', 'run.failed', 'run.cancelled', 'run.timeout', 'run.interrupted',
+  ].includes(item.event))
+  const duration = typeof terminal?.data.duration_ms === 'number' ? terminal.data.duration_ms : undefined
   const visibleEvents = events.filter((item) => item.event !== 'token.delta',)
   return (
     <aside className="inspector">
@@ -60,6 +64,8 @@ export function Inspector({ events, activeRunId, streaming, tokenCount, model, a
 
       <div className="trace-meta">
         <span>模型：{model || '--'}</span>
+        <span>最终状态：{runStatus || '--'}</span>
+        {cancelledAt ? <span>取消时间：{new Date(cancelledAt).toLocaleString()}</span> : null}
         <span>已持久化工具调用：{persistedToolCalls.length}</span>
       </div>
 

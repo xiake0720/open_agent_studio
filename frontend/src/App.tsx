@@ -4,10 +4,11 @@ import { api, ApiError, buildStreamUrl, normalizeModel } from './lib/api'
 import {
   createRunEvent,
   persistedToRunEvent,
+  readNumber,
   readString,
   STREAM_EVENTS,
 } from './lib/events'
-import type { AgentMode, AuthResult, AuthUser, CompareCandidate, Conversation, JudgeReport, Message, NormalizedModel, RunEvent, ThemeMode, Toast as ToastType, ToolCall } from './types'
+import type { AgentMode, AgentRunStatus, AuthResult, AuthUser, CompareCandidate, Conversation, JudgeReport, Message, NormalizedModel, RunEvent, ThemeMode, Toast as ToastType, ToolCall } from './types'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { ChatWindow } from './components/ChatWindow'
@@ -65,6 +66,8 @@ export default function App() {
 
   const [events, setEvents] = useState<RunEvent[]>([])
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [activeRunStatus, setActiveRunStatus] = useState<AgentRunStatus | null>(null)
+  const [cancelledAt, setCancelledAt] = useState<string | null>(null)
   const [draftContent, setDraftContent] = useState('')
   const [draftModel, setDraftModel] = useState<string | null>(null)
   const [draftAgent, setDraftAgent] = useState<string | null>('GeneralAgent')
@@ -127,13 +130,21 @@ export default function App() {
 
   const loadRunDetails = useCallback(async (runId: string) => {
     try {
-      const [persistedToolCalls, persistedEvents, persistedCompare] = await Promise.all([
+      const [run, persistedToolCalls, persistedEvents, persistedCompare] = await Promise.all([
+        api.getAgentRun(runId),
         api.listToolCalls(runId),
         api.listRunEvents(runId),
         api.getCompareResults(runId),
       ])
 
       setToolCalls(persistedToolCalls)
+      setActiveRunStatus(run.status)
+      setCancelledAt(run.cancelled_at || null)
+      if (run.final_output || run.partial_output) {
+        setDraftContent(run.final_output || run.partial_output || '')
+      } else if (run.status !== 'running' && run.status !== 'pending') {
+        setDraftContent('')
+      }
 
       if (persistedEvents.length > 0) {
         setEvents(
@@ -175,6 +186,20 @@ export default function App() {
         setSelectedAgentMode((firstConversation.agent_mode as AgentMode) || 'general')
         if (firstConversation.default_model) setSelectedModelId(firstConversation.default_model)
         await loadMessages(firstConversation.id)
+        const savedRunId = window.localStorage.getItem('oas-active-run-id')
+        if (savedRunId) {
+          try {
+            const savedRun = await api.getAgentRun(savedRunId)
+            if (savedRun.conversation_id === firstConversation.id) {
+              setActiveRunId(savedRunId)
+              setDraftModel(savedRun.model)
+              setDraftAgent(savedRun.agent_name)
+              await loadRunDetails(savedRunId)
+            }
+          } catch {
+            window.localStorage.removeItem('oas-active-run-id')
+          }
+        }
       }
     } catch (error) {
       setConnected(false)
@@ -182,7 +207,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [loadMessages, showToast])
+  }, [loadMessages, loadRunDetails, showToast])
 
   useEffect(() => {
     let cancelled = false
@@ -234,6 +259,8 @@ export default function App() {
       setJudgeReport(null)
       setDraftContent('')
       setActiveRunId(null)
+      setActiveRunStatus(null)
+      setCancelledAt(null)
       const created = data.find((item) => item.id === conversation.id)
       if (created?.agent_mode) setSelectedAgentMode(created.agent_mode as AgentMode)
       showToast('success', '已创建新会话')
@@ -253,6 +280,9 @@ export default function App() {
     setCompareCandidates([])
     setJudgeReport(null)
     setActiveRunId(null)
+    setActiveRunStatus(null)
+    setCancelledAt(null)
+    window.localStorage.removeItem('oas-active-run-id')
     const conversation = conversations.find((item) => item.id === id)
     if (conversation?.agent_mode) setSelectedAgentMode(conversation.agent_mode as AgentMode)
     if (conversation?.default_model) setSelectedModelId(conversation.default_model)
@@ -276,6 +306,8 @@ export default function App() {
         setToolCalls([])
         setCompareCandidates([])
         setJudgeReport(null)
+        setActiveRunStatus(null)
+        setCancelledAt(null)
         if (next) await loadMessages(next.id)
       }
       showToast('success', '会话已删除')
@@ -307,6 +339,8 @@ export default function App() {
     setDraftModel(result.model)
     setDraftAgent(result.agent_name)
     setActiveRunId(result.run_id)
+    setActiveRunStatus('completed')
+    window.localStorage.setItem('oas-active-run-id', result.run_id)
     appendEvent(createRunEvent('run.completed', JSON.stringify({
       run_id: result.run_id,
       final_output: result.final_output,
@@ -372,6 +406,9 @@ export default function App() {
       }
 
       setActiveRunId(run.run_id)
+      setActiveRunStatus(run.status)
+      setCancelledAt(null)
+      window.localStorage.setItem('oas-active-run-id', run.run_id)
       setDraftModel(run.model)
       setDraftAgent(run.agent_name)
       setStreaming(true)
@@ -383,12 +420,38 @@ export default function App() {
 
       STREAM_EVENTS.forEach((eventName) => {
         source.addEventListener(eventName, (messageEvent) => {
-          const event = createRunEvent(eventName, messageEvent.data)
+          const event = createRunEvent(eventName, messageEvent.data, messageEvent.lastEventId)
           appendEvent(event)
+
+          if (eventName === 'run.started') setActiveRunStatus('running')
+
+          if (eventName === 'run.snapshot') {
+            const partialOutput = readString(event.data, 'partial_output')
+            const status = readString(event.data, 'status') as AgentRunStatus | undefined
+            if (partialOutput !== undefined) setDraftContent(partialOutput)
+            if (status) setActiveRunStatus(status)
+          }
 
           if (eventName === 'token.delta') {
             const delta = readString(event.data, 'delta')
-            if (delta) setDraftContent((current) => current + delta)
+            const offsetStart = readNumber(event.data, 'offset_start')
+            if (delta) setDraftContent((current) => {
+              if (offsetStart === undefined) return current + delta
+              if (current.length > offsetStart) return current
+              return current + delta
+            })
+          }
+
+          if (eventName === 'token.chunk') {
+            const chunk = readString(event.data, 'chunk')
+            const offsetStart = readNumber(event.data, 'offset_start')
+            if (chunk && offsetStart !== undefined) {
+              setDraftContent((current) => {
+                if (current.length >= offsetStart + chunk.length) return current
+                if (current.length <= offsetStart) return current + chunk
+                return current + chunk.slice(current.length - offsetStart)
+              })
+            }
           }
 
           if (eventName === 'agent.updated') {
@@ -423,6 +486,7 @@ export default function App() {
             source.close()
             sourceRef.current = null
             setStreaming(false)
+            setActiveRunStatus('completed')
             if (finalOutput) setDraftContent(finalOutput)
             void loadRunDetails(run.run_id)
             window.setTimeout(() => {
@@ -435,6 +499,27 @@ export default function App() {
               })()
               void refreshConversations()
             }, 320)
+          }
+
+          if (eventName === 'run.cancel.requested') {
+            showToast('info', '正在停止 Agent', '服务端已收到取消请求。')
+          }
+
+          if (eventName === 'run.cancelled' || eventName === 'run.timeout' || eventName === 'run.interrupted' || eventName === 'run.failed') {
+            source.close()
+            sourceRef.current = null
+            setStreaming(false)
+            const status = eventName.replace('run.', '') as AgentRunStatus
+            setActiveRunStatus(status)
+            const partialOutput = readString(event.data, 'partial_output')
+            if (partialOutput !== undefined) setDraftContent(partialOutput)
+            const eventCancelledAt = readString(event.data, 'cancelled_at')
+            if (eventCancelledAt) setCancelledAt(eventCancelledAt)
+            const message = readString(event.data, 'message')
+            if (eventName === 'run.timeout') showToast('warning', 'Agent 运行超时', message)
+            if (eventName === 'run.interrupted') showToast('warning', 'Agent 运行已中断', message)
+            if (eventName === 'run.failed') showToast('error', 'Agent 执行失败', message)
+            void loadRunDetails(run.run_id)
           }
 
           if (eventName === 'run.error') {
@@ -452,9 +537,20 @@ export default function App() {
       source.onmessage = (messageEvent) => appendEvent(createRunEvent('message', messageEvent.data))
       source.onerror = () => {
         appendEvent(createRunEvent('connection.error', JSON.stringify({ message: 'SSE 连接异常或已关闭' })))
-        source.close()
-        sourceRef.current = null
-        setStreaming(false)
+        void api.getAgentRun(run.run_id).then((state) => {
+          setActiveRunStatus(state.status)
+          if (state.status !== 'pending' && state.status !== 'running') {
+            source.close()
+            sourceRef.current = null
+            setStreaming(false)
+            setDraftContent(state.final_output || state.partial_output || '')
+            setCancelledAt(state.cancelled_at || null)
+          }
+        }).catch(() => {
+          source.close()
+          sourceRef.current = null
+          setStreaming(false)
+        })
       }
     } catch (error) {
       setStreaming(false)
@@ -463,12 +559,22 @@ export default function App() {
     }
   }, [appendEvent, ensureConversation, fallbackChat, input, loadRunDetails, selectedAgentMode, selectedCompareModelIds, refreshConversations, selectedModelId, showToast, streaming, syncCompletedMessages])
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
+    if (!activeRunId) return
+    try {
+      const result = await api.cancelAgentRun(activeRunId)
+      setActiveRunStatus(result.status)
+      setCancelledAt(result.cancelled_at || null)
+      appendEvent(createRunEvent('run.cancel.requested', JSON.stringify(result)))
+    } catch (error) {
+      showToast('error', '停止失败', errorMessage(error))
+      return
+    }
     sourceRef.current?.close()
     sourceRef.current = null
     setStreaming(false)
-    appendEvent(createRunEvent('client.stop', JSON.stringify({ message: '用户手动停止流式连接' })))
-  }, [appendEvent])
+    void loadRunDetails(activeRunId)
+  }, [activeRunId, appendEvent, loadRunDetails, showToast])
 
   const handleExampleClick = useCallback((text: string) => setInput(text), [])
 
@@ -498,6 +604,9 @@ export default function App() {
     setJudgeReport(null)
     setActiveConversationId(null)
     setActiveRunId(null)
+    setActiveRunStatus(null)
+    setCancelledAt(null)
+    window.localStorage.removeItem('oas-active-run-id')
     setDraftContent('')
   }, [])
 
@@ -569,7 +678,7 @@ export default function App() {
           streaming={streaming}
           onChange={setInput}
           onSend={handleSend}
-          onStop={handleStop}
+          onStop={() => void handleStop()}
         />
       </main>
 
@@ -581,6 +690,8 @@ export default function App() {
           tokenCount={tokenCount}
           model={draftModel || selectedModel?.modelId}
           agentName={draftAgent}
+          runStatus={activeRunStatus}
+          cancelledAt={cancelledAt}
           persistedToolCalls={toolCalls}
           onClear={() => setEvents([])}
         />

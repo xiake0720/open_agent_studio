@@ -54,8 +54,17 @@ class Settings(BaseSettings):
     LOGIN_CAPTCHA_AFTER_FAILURES: int = 3
     LOGIN_CAPTCHA_TTL_SECONDS: int = 300
 
+    AGENT_RUN_TIMEOUT_SECONDS: float = 120.0
+    AGENT_TOKEN_CHUNK_CHARS: int = 256
+    AGENT_TOKEN_CHUNK_SECONDS: float = 1.0
+
     DEFAULT_ADMIN_USERNAME: str = "admin"
     DEFAULT_ADMIN_PASSWORD: str = "OpenAgent@2026!"
+
+    NVIDIA_IMAGE_INVOKE_URL: str = (
+        "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b"
+    )
+    NVIDIA_IMAGE_TIMEOUT_SECONDS: float = 90.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

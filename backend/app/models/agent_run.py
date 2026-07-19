@@ -5,6 +5,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db.base import Base
+from backend.app.core.agent_run_status import AgentRunStatus
 
 
 class AgentRun(Base):
@@ -61,8 +62,9 @@ class AgentRun(Base):
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
-        default="running",
-        comment="运行状态：running / completed / failed",
+        default=AgentRunStatus.PENDING.value,
+        server_default=AgentRunStatus.PENDING.value,
+        comment="运行状态：pending / running / completed / failed / cancelled / timeout / interrupted",
     )
 
     input_text: Mapped[str] = mapped_column(
@@ -89,10 +91,56 @@ class AgentRun(Base):
         comment="运行耗时毫秒",
     )
 
-    started_at: Mapped[datetime] = mapped_column(
+    execution_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        unique=True,
+        comment="原子领取成功的执行者ID",
+    )
+
+    claimed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        nullable=True,
+        comment="执行者领取时间",
+    )
+
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="服务端收到取消请求的时间",
+    )
+
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="运行最终取消时间",
+    )
+
+    partial_output: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="已生成但尚未完成的聚合输出",
+    )
+
+    version: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
+        default=0,
+        server_default="0",
+        comment="状态变更乐观锁版本",
+    )
+
+    event_seq: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="持久化事件的最后序号",
+    )
+
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
         comment="开始时间",
     )
 

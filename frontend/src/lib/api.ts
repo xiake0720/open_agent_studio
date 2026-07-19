@@ -2,6 +2,7 @@ import type {
   AgentRun,
   AgentRunCreatePayload,
   AgentRunCreateResult,
+  AgentRunCancelResult,
   ApiEnvelope,
   Asset,
   AuthResult,
@@ -222,6 +223,10 @@ export const api = {
 
   getAgentRun(runId: string): Promise<AgentRun> {
     return request<AgentRun>(`/agent-runs/${runId}`)
+  },
+
+  cancelAgentRun(runId: string): Promise<AgentRunCancelResult> {
+    return request<AgentRunCancelResult>(`/agent-runs/${runId}/cancel`, { method: 'POST' })
   },
 
   listRunEvents(runId: string): Promise<PersistedRunEvent[]> {

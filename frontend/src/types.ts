@@ -24,6 +24,7 @@ export type CaptchaChallenge = {
 }
 
 export type AgentMode = 'auto' | 'general' | 'tech' | 'ecommerce' | 'image' | 'compare'
+export type AgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'interrupted'
 
 export type Conversation = {
   id: string
@@ -102,6 +103,7 @@ export type AgentRunCreateResult = {
   model_config_id: string
   model: string
   agent_name: string
+  status: AgentRunStatus
   stream_url: string
 }
 
@@ -112,14 +114,28 @@ export type AgentRun = {
   model_config_id?: string | null
   agent_name: string
   model: string
-  status: 'running' | 'completed' | 'failed' | string
+  status: AgentRunStatus
   input_text: string
   final_output?: string | null
   error_message?: string | null
   duration_ms?: number | null
-  started_at: string
+  execution_id?: string | null
+  claimed_at?: string | null
+  cancel_requested_at?: string | null
+  cancelled_at?: string | null
+  partial_output?: string | null
+  version: number
+  started_at?: string | null
   finished_at?: string | null
   created_at: string
+}
+
+export type AgentRunCancelResult = {
+  run_id: string
+  status: AgentRunStatus
+  cancel_requested_at?: string | null
+  cancelled_at?: string | null
+  idempotent: boolean
 }
 
 export type RunEvent = {

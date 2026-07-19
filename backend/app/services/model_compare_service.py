@@ -106,6 +106,15 @@ async def fail_model_compare(db: AsyncSession, compare: ModelCompare) -> None:
     await db.commit()
 
 
+async def cancel_model_compare(db: AsyncSession, compare: ModelCompare, status: str) -> None:
+    compare.status = status
+    for result in compare.results:
+        if result.status == "running":
+            result.status = status
+            result.error_message = "顶层 AgentRun 已终止"
+    await db.commit()
+
+
 async def get_model_compare_response(
     db: AsyncSession,
     run_id: str,

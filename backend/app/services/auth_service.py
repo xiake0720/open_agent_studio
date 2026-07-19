@@ -96,7 +96,10 @@ async def register_user(db: AsyncSession, username: str, password: str) -> tuple
     if existing is not None:
         raise AppException("用户名已被注册", code=40901, status_code=409)
 
-    user_count = int(await db.scalar(select(func.count(User.id))) or 0)
+    # 默认管理员不占用“首个普通用户”名额；首个注册用户仍应接管旧库中的无主会话。
+    user_count = int(
+        await db.scalar(select(func.count(User.id)).where(User.is_admin.is_(False))) or 0
+    )
     user = User(username=username.strip(), username_key=key, password_hash=hash_password(password))
     db.add(user)
     try:

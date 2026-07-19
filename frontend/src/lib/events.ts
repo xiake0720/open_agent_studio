@@ -9,7 +9,9 @@ export const STREAM_EVENTS = [
   'route.started',
   'route.decision',
   'agent.updated',
+  'run.snapshot',
   'token.delta',
+  'token.chunk',
   'run.item',
   'tool.called',
   'tool.output',
@@ -20,6 +22,11 @@ export const STREAM_EVENTS = [
   'judge.started',
   'judge.completed',
   'run.completed',
+  'run.failed',
+  'run.cancel.requested',
+  'run.cancelled',
+  'run.timeout',
+  'run.interrupted',
   'run.error',
   'connection.error',
   'client.stop',
@@ -57,9 +64,9 @@ export function parseEventData(raw: string): Record<string, unknown> {
   }
 }
 
-export function createRunEvent(event: string, rawData: string): RunEvent {
+export function createRunEvent(event: string, rawData: string, eventId?: string): RunEvent {
   return {
-    id: `${event}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: eventId ? `${event}-${eventId}` : `${event}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     event,
     data: parseEventData(rawData),
     createdAt: Date.now(),

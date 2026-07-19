@@ -4,11 +4,16 @@ from datetime import datetime
 
 from zoneinfo import ZoneInfo
 
-from agents import function_tool
+from agents import RunContextWrapper, function_tool
 import json
 
+from backend.app.agents.context import AppRunContext
+
 @function_tool
-def get_current_time(timezone: str = "Asia/Shanghai") -> str :
+def get_current_time(
+    context: RunContextWrapper[AppRunContext],
+    timezone: str = "Asia/Shanghai",
+) -> str:
     """
     获取指定时区的当前时间
     Args:
@@ -16,6 +21,7 @@ def get_current_time(timezone: str = "Asia/Shanghai") -> str :
     :param timezone:
     :return:
     """
+    context.context.require_permission("tool.basic")
     try:
         now = datetime.now(ZoneInfo(timezone))
     except Exception:
@@ -104,13 +110,17 @@ SENSITIVE_WORDS = {
 
 
 @function_tool
-def check_sensitive_words(text: str) -> str:
+def check_sensitive_words(
+    context: RunContextWrapper[AppRunContext],
+    text: str,
+) -> str:
     """
     检查电商文案中的常见风险词，并给出替代表达建议。
 
     Args:
         text: 需要检查的商品标题、主图文案或详情页文案。
     """
+    context.context.require_permission("tool.basic")
     items = []
 
     for word, rule in SENSITIVE_WORDS.items():
