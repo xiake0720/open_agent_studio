@@ -20,7 +20,6 @@ from backend.app.agents.modes import (
     resolve_agent_mode,
 )
 from backend.app.agents.routing import resolve_route_decision
-from backend.app.agents.triage_agent import build_triage_agent
 from backend.app.core.agent_run_status import AgentRunStatus, TERMINAL_AGENT_RUN_STATUSES
 from backend.app.core.config import settings
 from backend.app.core.exceptions import AppException
@@ -521,7 +520,7 @@ async def _execute_agent_pipeline(
             ):
                 pass
             return
-        agent = build_triage_agent(built_model, decision)
+        agent = AgentFactory(built_model=built_model).build(AgentMode(decision.specialist))
     elif agent_mode is AgentMode.COMPARE:
         compare = await get_model_compare(db, run.id)
         if compare is None:
@@ -935,7 +934,7 @@ async def run_general_chat(db: AsyncSession, payload: ChatRequest, user_id: str)
                 )
                 if decision.specialist == "compare":
                     raise AppException(message="自动路由到 Compare 时请使用流式接口", code=40034)
-                agent = build_triage_agent(built_model, decision)
+                agent = AgentFactory(built_model=built_model).build(AgentMode(decision.specialist))
             else:
                 agent = AgentFactory(built_model=built_model).build(agent_mode)
 

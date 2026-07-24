@@ -75,11 +75,11 @@ class AgentConstructionTests(unittest.TestCase):
         self.assertEqual(agent.name, "EcommerceAgent")
         self.assertIn("check_sensitive_words", [tool.name for tool in agent.tools])
 
-    def test_triage_uses_specialists_as_tools(self) -> None:
+    def test_triage_does_not_embed_specialists_as_tools(self) -> None:
         decision = fallback_route_decision("Python TypeError 报错")
         agent = build_triage_agent(self.built_model, decision)
         names = {tool.name for tool in agent.tools}
-        self.assertTrue({"ask_tech_expert", "ask_ecommerce_expert", "ask_image_expert"}.issubset(names))
+        self.assertFalse({"ask_tech_expert", "ask_ecommerce_expert", "ask_image_expert"} & names)
 
     def test_image_agent_has_nvidia_flux_tool(self) -> None:
         agent = build_image_agent(self.built_model)

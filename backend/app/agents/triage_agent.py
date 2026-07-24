@@ -1,9 +1,6 @@
 from agents import Agent
 
 from backend.app.agents.contracts import RouteDecision
-from backend.app.agents.ecommerce_agent import build_ecommerce_agent
-from backend.app.agents.image_agent import build_image_agent
-from backend.app.agents.tech_agent import build_tech_agent
 from backend.app.services.model_factory import BuiltModel
 from backend.app.tools import build_general_tools
 
@@ -31,36 +28,17 @@ def build_triage_agent(
     built_model: BuiltModel,
     decision: RouteDecision,
 ) -> Agent:
-    """构建保留最终答复控制权的 manager-style TriageAgent。"""
+    """构建轻量 TriageAgent。
+
+    专家 Agent 不再通过 Agent.as_tool() 挂载，避免把包含 AsyncOpenAI/httpx
+    客户端的 Agent 对象嵌入工具后触发 pickle/deepcopy RLock 错误。
+    """
 
     tools = list(build_general_tools()) if built_model.config.support_tools else []
 
-    if built_model.config.support_tools:
-        tools.extend([
-            build_tech_agent(built_model).as_tool(
-                tool_name="ask_tech_expert",
-                tool_description="分析代码、报错、API、数据库和工程问题。",
-            ),
-            build_ecommerce_agent(built_model).as_tool(
-                tool_name="ask_ecommerce_expert",
-                tool_description="检查电商文案风险词并优化商品文案。",
-            ),
-            build_image_agent(built_model).as_tool(
-                tool_name="ask_image_expert",
-                tool_description="生成图片方案、构图建议和生图提示词。",
-            ),
-        ])
-
-    specialist_tool = {
-        "tech": "ask_tech_expert",
-        "ecommerce": "ask_ecommerce_expert",
-        "image": "ask_image_expert",
-    }.get(decision.specialist)
-
     specialist_instruction = (
-        f"路由结果要求你必须先调用 {specialist_tool}，再综合专家结果回复用户。"
-        if specialist_tool and built_model.config.support_tools
-        else "本次是通用问题，请直接回答；需要时间或计算时可调用基础工具。"
+        "Auto 模式运行链路会直接切换到对应专家 Agent；"
+        "如果仍直接调用本 Agent，请按路由结果给出简洁答复。"
     )
 
     return Agent(
