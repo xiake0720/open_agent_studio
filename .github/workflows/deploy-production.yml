@@ -1,0 +1,91 @@
+name: Deploy Open Agent Studio
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: open-agent-studio-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Tencent Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check deployment file
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f docker-compose.server.yml
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.TENCENT_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.TENCENT_SSH_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+
+          install -m 700 -d "$HOME/.ssh"
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" \
+            | tr -d '\r' \
+            > "$HOME/.ssh/open_agent_deploy"
+
+          chmod 600 "$HOME/.ssh/open_agent_deploy"
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" \
+            > "$HOME/.ssh/known_hosts"
+
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload and deploy
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.TENCENT_SSH_HOST }}
+          SSH_PORT: ${{ secrets.TENCENT_SSH_PORT }}
+          SSH_USER: ${{ secrets.TENCENT_SSH_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+
+          echo "Deploying commit: $DEPLOY_SHA"
+
+          tar \
+            --exclude='./.git' \
+            --exclude='./.env' \
+            --exclude='./node_modules' \
+            --exclude='./target' \
+            -czf - \
+            . \
+          | ssh \
+              -i "$HOME/.ssh/open_agent_deploy" \
+              -p "$SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=20 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=4 \
+              "$SSH_USER@$SSH_HOST" \
+              "deploy $DEPLOY_SHA"
+
+      - name: Clean temporary SSH files
+        if: always()
+        shell: bash
+        run: |
+          rm -f \
+            "$HOME/.ssh/open_agent_deploy" \
+            "$HOME/.ssh/known_hosts"
