@@ -12,7 +12,7 @@ class ModelConfig(Base):
     模型配置表。
 
     注意：
-    不直接保存 API Key 明文，只保存环境变量名称 api_key_env。
+    api_key 用于后台模型配置直接维护密钥；api_key_env 仅保留为旧配置兜底。
     """
 
     __tablename__ = "model_configs"
@@ -48,10 +48,16 @@ class ModelConfig(Base):
         comment="OpenAI-compatible base_url",
     )
 
-    api_key_env: Mapped[str] = mapped_column(
+    api_key: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="模型 API Key，由管理员后台配置",
+    )
+
+    api_key_env: Mapped[str | None] = mapped_column(
         String(100),
-        nullable=False,
-        comment="API Key 对应的环境变量名",
+        nullable=True,
+        comment="旧配置兼容：API Key 对应的环境变量名",
     )
 
     api_shape: Mapped[str] = mapped_column(
@@ -109,3 +115,7 @@ class ModelConfig(Base):
         nullable=False,
         comment="更新时间",
     )
+
+    @property
+    def api_key_configured(self) -> bool:
+        return bool(self.api_key)

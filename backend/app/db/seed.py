@@ -10,36 +10,11 @@ from backend.app.services.auth_service import hash_password, username_key
 
 DEFAULT_MODEL_CONFIGS = [
     {
-        "provider": "glm",
-        "display_name": "GLM-5.1",
-        "model_id": "glm-5.1",
-        "base_url": "https://ai-clawbot.shuwenda.com/v1",
-        "api_key_env": "GLM_API_KEY",
-        "api_shape": "chat_completions",
-        "support_streaming": True,
-        "support_tools": True,
-        "support_image": False,
-        "enabled": True,
-        "extra_body_json": '{"thinking":{"type":"disabled"}}',
-    },
-    {
-        "provider": "qwen",
-        "display_name": "qwen3.5-397b-a17b",
-        "model_id": "qwen/qwen3.5-397b-a17b",
-        "base_url": "https://integrate.api.nvidia.com/v1",
-        "api_key_env": "NVIDIA_KEY",
-        "api_shape": "chat_completions",
-        "support_streaming": True,
-        "support_tools": True,
-        "support_image": False,
-        "enabled": True,
-        "extra_body_json": None,
-    },
-    {
         "provider": "deepseek",
         "display_name": "deepseek-v4-pro",
         "model_id": "deepseek-ai/deepseek-v4-pro",
         "base_url": "https://integrate.api.nvidia.com/v1",
+        "api_key": None,
         "api_key_env": "NVIDIA_KEY",
         "api_shape": "chat_completions",
         "support_streaming": True,
@@ -47,20 +22,7 @@ DEFAULT_MODEL_CONFIGS = [
         "support_image": False,
         "enabled": True,
         "extra_body_json": None,
-    },
-    {
-        "provider": "flux",
-        "display_name": "Flux Image",
-        "model_id": "flux",
-        "base_url": "https://your-image-api.example.com/v1",
-        "api_key_env": "IMAGE_MODEL_API_KEY",
-        "api_shape": "image",
-        "support_streaming": False,
-        "support_tools": False,
-        "support_image": True,
-        "enabled": False,
-        "extra_body_json": None,
-    },
+    }
 ]
 
 
@@ -89,8 +51,8 @@ async def seed_model_configs(db: AsyncSession) -> None:
     初始化默认模型配置。
 
     注意：
-    1. 不保存真实 API Key。
-    2. 只保存 api_key_env，也就是环境变量名称。
+    1. 新部署可在管理员后台直接配置 api_key。
+    2. 旧部署仍可使用 api_key_env 从环境变量读取。
     3. 如果 provider + model_id 已存在，则跳过，避免重复插入。
     """
 

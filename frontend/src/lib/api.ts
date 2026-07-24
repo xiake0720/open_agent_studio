@@ -263,8 +263,11 @@ export const api = {
 }
 
 export const adminApi = {
-  login(payload: { username: string; password: string }): Promise<{ user: AdminUser; expires_at: string }> {
+  login(payload: { username: string; password: string; captcha_id?: string; captcha_code?: string }): Promise<{ user: AdminUser; expires_at: string }> {
     return request('/admin/auth/login', { method: 'POST', body: JSON.stringify(payload) })
+  },
+  getCaptcha(): Promise<CaptchaChallenge> {
+    return request<CaptchaChallenge>('/auth/captcha')
   },
   me(): Promise<AdminUser> {
     return request('/admin/auth/me')

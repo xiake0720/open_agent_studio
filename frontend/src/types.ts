@@ -277,7 +277,8 @@ export type AdminModel = {
   display_name: string
   model_id: string
   base_url: string
-  api_key_env: string
+  api_key_configured: boolean
+  api_key_env?: string | null
   api_shape: string
   support_streaming: boolean
   support_tools: boolean
@@ -288,7 +289,9 @@ export type AdminModel = {
   updated_at: string
 }
 
-export type AdminModelPayload = Omit<AdminModel, 'id' | 'created_at' | 'updated_at'>
+export type AdminModelPayload = Omit<AdminModel, 'id' | 'api_key_configured' | 'created_at' | 'updated_at'> & {
+  api_key?: string | null
+}
 
 export type AdminTokenStats = {
   date_from: string

@@ -53,6 +53,7 @@ def model_data(item: ModelConfig) -> dict:
         "display_name": item.display_name,
         "model_id": item.model_id,
         "base_url": item.base_url,
+        "api_key_configured": bool(item.api_key),
         "api_key_env": item.api_key_env,
         "api_shape": item.api_shape,
         "support_streaming": item.support_streaming,
@@ -75,13 +76,24 @@ def validate_extra_json(value: str | None) -> None:
             raise AppException("额外参数必须是 JSON 对象", code=42211, status_code=422)
 
 
+def validate_key_source(api_key: str | None, api_key_env: str | None) -> None:
+    if not api_key and not api_key_env:
+        raise AppException("请配置 API Key", code=42212, status_code=422)
+
+
 @router.post("/auth/login")
 async def admin_login_api(
     payload: AdminLoginRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    user, token, session = await authenticate_user(db, payload.username, payload.password, None, None)
+    user, token, session = await authenticate_user(
+        db,
+        payload.username,
+        payload.password,
+        payload.captcha_id,
+        payload.captcha_code,
+    )
     if not user.is_admin:
         await revoke_session(db, token)
         raise AppException("该账号没有管理员权限", code=40310, status_code=403)
@@ -225,6 +237,7 @@ async def create_model_api(
     _: User = Depends(get_current_admin),
 ):
     validate_extra_json(payload.extra_body_json)
+    validate_key_source(payload.api_key, payload.api_key_env)
     exists = await db.scalar(select(ModelConfig.id).where(ModelConfig.provider == payload.provider, ModelConfig.model_id == payload.model_id))
     if exists:
         raise AppException("该模型配置已存在", code=40920, status_code=409)
@@ -246,10 +259,14 @@ async def update_model_api(
     item = await db.get(ModelConfig, model_id)
     if item is None:
         raise AppException("模型配置不存在", code=40421, status_code=404)
+    validate_key_source(payload.api_key or item.api_key, payload.api_key_env)
     duplicate = await db.scalar(select(ModelConfig.id).where(ModelConfig.provider == payload.provider, ModelConfig.model_id == payload.model_id, ModelConfig.id != model_id))
     if duplicate:
         raise AppException("该模型配置已存在", code=40920, status_code=409)
-    for key, value in payload.model_dump().items():
+    updates = payload.model_dump()
+    if not updates.get("api_key"):
+        updates.pop("api_key", None)
+    for key, value in updates.items():
         setattr(item, key, value)
     await db.commit()
     await db.refresh(item)

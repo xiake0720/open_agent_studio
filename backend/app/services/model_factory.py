@@ -88,14 +88,17 @@ def build_chat_model(model_config: ModelConfig) -> BuiltModel:
             },
         )
 
-    api_key = os.getenv(model_config.api_key_env)
+    api_key = (model_config.api_key or "").strip()
+    if not api_key and model_config.api_key_env:
+        api_key = os.getenv(model_config.api_key_env, "").strip()
 
     if not api_key:
         raise AppException(
-            message="模型 API Key 环境变量未配置",
+            message="模型 API Key 未配置",
             code=40013,
             data={
                 "api_key_env": model_config.api_key_env,
+                "api_key_configured": bool(model_config.api_key),
                 "model": model_config.display_name,
             },
         )

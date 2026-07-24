@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity, AlertTriangle, Bot, ChartNoAxesCombined, ChevronRight, CircleGauge,
-  Database, LogOut, Menu, MessageSquareText, Plus, RefreshCw, Save, Search,
+  Database, Loader2, LogOut, Menu, MessageSquareText, Plus, RefreshCw, Save, Search,
   ShieldCheck, Users, X,
 } from 'lucide-react'
 import { adminApi, ApiError } from './lib/api'
 import type {
   AdminConversation, AdminConversationDetail, AdminException, AdminManagedUser,
   AdminModel, AdminModelPayload, AdminOverview, AdminTokenStats, AdminUser,
+  CaptchaChallenge,
 } from './types'
 import { formatDateTime } from './utils/format'
 
@@ -23,9 +24,14 @@ const NAV: Array<{ id: Section; label: string; icon: typeof CircleGauge }> = [
 ]
 
 const EMPTY_MODEL: AdminModelPayload = {
-  provider: '', display_name: '', model_id: '', base_url: '', api_key_env: '',
+  provider: '', display_name: '', model_id: '', base_url: '', api_key: '', api_key_env: '',
   api_shape: 'chat_completions', support_streaming: true, support_tools: false,
   support_image: false, enabled: true, extra_body_json: '',
+}
+
+type AuthErrorData = {
+  captcha_required?: boolean
+  refresh_captcha?: boolean
 }
 
 function errorText(error: unknown) {
@@ -45,15 +51,40 @@ function dateInput(daysAgo = 0) {
 function AdminLogin({ onLogin }: { onLogin: (user: AdminUser) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [captchaCode, setCaptchaCode] = useState('')
+  const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null)
+  const [captchaLoading, setCaptchaLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const refreshCaptcha = useCallback(async () => {
+    setCaptchaLoading(true)
+    try {
+      setCaptcha(await adminApi.getCaptcha())
+      setCaptchaCode('')
+    } catch (reason) {
+      setError(errorText(reason))
+    } finally {
+      setCaptchaLoading(false)
+    }
+  }, [])
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     setLoading(true); setError('')
     try {
-      const result = await adminApi.login({ username, password })
+      const result = await adminApi.login({
+        username,
+        password,
+        captcha_id: captcha?.captcha_id,
+        captcha_code: captchaCode || undefined,
+      })
       onLogin(result.user)
-    } catch (reason) { setError(errorText(reason)) } finally { setLoading(false) }
+    } catch (reason) {
+      setError(errorText(reason))
+      if (reason instanceof ApiError) {
+        const data = reason.data as AuthErrorData | undefined
+        if (data?.captcha_required) await refreshCaptcha()
+      }
+    } finally { setLoading(false) }
   }
   return <div className="admin-login">
     <form className="admin-login__card" onSubmit={submit}>
@@ -63,8 +94,19 @@ function AdminLogin({ onLogin }: { onLogin: (user: AdminUser) => void }) {
       <p>仅限系统管理员访问</p>
       <label>管理员账号<input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} placeholder="请输入管理员账号" /></label>
       <label>密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入密码" /></label>
+      {captcha ? <div className="admin-captcha">
+        <span>安全验证码</span>
+        <div>
+          <input value={captchaCode} onChange={(event) => setCaptchaCode(event.target.value.toUpperCase())} maxLength={12} placeholder="输入图中字符" required />
+          <button type="button" onClick={() => void refreshCaptcha()} title="换一张验证码">
+            {captchaLoading ? <Loader2 className="spin" size={18} /> : <img src={captcha.image_data_uri} alt="登录验证码" />}
+            <RefreshCw size={13} />
+          </button>
+        </div>
+        <small>密码连续错误多次，需要完成验证码校验。</small>
+      </div> : null}
       {error ? <div className="admin-error">{error}</div> : null}
-      <button className="admin-primary" disabled={loading || !username || !password}>{loading ? '正在验证…' : '安全登录'}</button>
+      <button className="admin-primary" disabled={loading || !username || !password || (!!captcha && !captchaCode)}>{loading ? '正在验证…' : '安全登录'}</button>
       <a href="/">返回智能体工作台</a>
     </form>
   </div>
@@ -105,18 +147,22 @@ function TokensView({ data, dateFrom, dateTo, onDateFrom, onDateTo }: { data: Ad
 }
 
 function ModelEditor({ item, onClose, onSave }: { item: AdminModel | null; onClose: () => void; onSave: (data: AdminModelPayload) => Promise<void> }) {
-  const [form, setForm] = useState<AdminModelPayload>(item ? { provider:item.provider, display_name:item.display_name, model_id:item.model_id, base_url:item.base_url, api_key_env:item.api_key_env, api_shape:item.api_shape, support_streaming:item.support_streaming, support_tools:item.support_tools, support_image:item.support_image, enabled:item.enabled, extra_body_json:item.extra_body_json || '' } : EMPTY_MODEL)
+  const [form, setForm] = useState<AdminModelPayload>(item ? { provider:item.provider, display_name:item.display_name, model_id:item.model_id, base_url:item.base_url, api_key:'', api_key_env:item.api_key_env || '', api_shape:item.api_shape, support_streaming:item.support_streaming, support_tools:item.support_tools, support_image:item.support_image, enabled:item.enabled, extra_body_json:item.extra_body_json || '' } : EMPTY_MODEL)
   const [saving, setSaving] = useState(false); const [error, setError] = useState('')
   const text = (key: keyof AdminModelPayload, value: string) => setForm(current => ({ ...current, [key]: value }))
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); setSaving(true); setError(''); try { await onSave(form); onClose() } catch (reason) { setError(errorText(reason)) } finally { setSaving(false) } }
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault(); setSaving(true); setError('')
+    const payload = { ...form, api_key: form.api_key || undefined, api_key_env: form.api_key_env || undefined }
+    try { await onSave(payload); onClose() } catch (reason) { setError(errorText(reason)) } finally { setSaving(false) }
+  }
   return <div className="admin-modal"><form className="admin-modal__card" onSubmit={submit}><header><div><span className="admin-kicker">MODEL CONFIG</span><h2>{item ? '编辑模型' : '新增模型'}</h2></div><button type="button" onClick={onClose} aria-label="关闭模型配置"><X /></button></header>
-    <div className="admin-form-grid"><label>供应商<input value={form.provider} onChange={e => text('provider', e.target.value)} required /></label><label>显示名称<input value={form.display_name} onChange={e => text('display_name', e.target.value)} required /></label><label>模型 ID<input value={form.model_id} onChange={e => text('model_id', e.target.value)} required /></label><label>API 类型<select value={form.api_shape} onChange={e => text('api_shape', e.target.value)}><option value="chat_completions">Chat Completions</option><option value="responses">Responses</option><option value="image">Image</option></select></label><label className="wide">Base URL<input value={form.base_url} onChange={e => text('base_url', e.target.value)} required /></label><label className="wide">API Key 环境变量<input value={form.api_key_env} onChange={e => text('api_key_env', e.target.value)} placeholder="例如 GLM_API_KEY" required /><small>后台不会保存 API Key 明文</small></label><label className="wide">额外参数 JSON<textarea value={form.extra_body_json || ''} onChange={e => text('extra_body_json', e.target.value)} placeholder='例如 {"thinking":{"type":"disabled"}}' /></label></div>
+    <div className="admin-form-grid"><label>供应商<input value={form.provider} onChange={e => text('provider', e.target.value)} required /></label><label>显示名称<input value={form.display_name} onChange={e => text('display_name', e.target.value)} required /></label><label>模型 ID<input value={form.model_id} onChange={e => text('model_id', e.target.value)} required /></label><label>API 类型<select value={form.api_shape} onChange={e => text('api_shape', e.target.value)}><option value="chat_completions">Chat Completions</option><option value="responses">Responses</option><option value="image">Image</option></select></label><label className="wide">Base URL<input value={form.base_url} onChange={e => text('base_url', e.target.value)} required /></label><label className="wide">API Key<input type="password" value={form.api_key || ''} onChange={e => text('api_key', e.target.value)} placeholder={item?.api_key_configured ? '已配置，留空则不修改' : '请输入模型 API Key'} required={!item || !item.api_key_configured && !form.api_key_env} /><small>{item?.api_key_configured ? '已配置密钥；再次填写会覆盖原密钥。' : '密钥会保存到后台模型配置，不会在列表中明文展示。'}</small></label><label className="wide">API Key 环境变量（兼容旧配置）<input value={form.api_key_env || ''} onChange={e => text('api_key_env', e.target.value)} placeholder="例如 GLM_API_KEY，可选" /><small>仅未填写 API Key 时作为兜底读取。</small></label><label className="wide">额外参数 JSON<textarea value={form.extra_body_json || ''} onChange={e => text('extra_body_json', e.target.value)} placeholder='例如 {"thinking":{"type":"disabled"}}' /></label></div>
     <div className="admin-checks">{([['enabled','启用模型'],['support_streaming','流式输出'],['support_tools','工具调用'],['support_image','图片能力']] as const).map(([key,label]) => <label key={key}><input type="checkbox" checked={form[key]} onChange={e => setForm(current => ({...current,[key]:e.target.checked}))} />{label}</label>)}</div>
     {error ? <div className="admin-error">{error}</div> : null}<footer><button type="button" className="admin-quiet" onClick={onClose}>取消</button><button className="admin-primary" disabled={saving}><Save size={16} />{saving ? '保存中…' : '保存配置'}</button></footer></form></div>
 }
 
 function ModelsView({ items, onEdit, onNew }: { items: AdminModel[]; onEdit: (item: AdminModel) => void; onNew: () => void }) {
-  return <section className="admin-panel"><div className="admin-panel__actions"><div><h2>模型配置</h2><p>配置会写入数据库，密钥通过环境变量读取</p></div><button className="admin-primary" onClick={onNew}><Plus size={16} />新增模型</button></div><div className="model-admin-grid">{items.map(item => <article key={item.id}><header><div><span>{item.provider}</span><h3>{item.display_name}</h3></div><i className={item.enabled ? 'on' : ''}>{item.enabled ? '启用' : '停用'}</i></header><code>{item.model_id}</code><p>{item.base_url}</p><div className="model-tags"><span>{item.api_shape}</span>{item.support_streaming && <span>流式</span>}{item.support_tools && <span>工具</span>}{item.support_image && <span>图片</span>}</div><footer><small>{item.api_key_env}</small><button className="admin-quiet" onClick={() => onEdit(item)}>编辑</button></footer></article>)}</div></section>
+  return <section className="admin-panel"><div className="admin-panel__actions"><div><h2>模型配置</h2><p>配置会写入数据库，调用密钥优先读取后台配置</p></div><button className="admin-primary" onClick={onNew}><Plus size={16} />新增模型</button></div><div className="model-admin-grid">{items.map(item => <article key={item.id}><header><div><span>{item.provider}</span><h3>{item.display_name}</h3></div><i className={item.enabled ? 'on' : ''}>{item.enabled ? '启用' : '停用'}</i></header><code>{item.model_id}</code><p>{item.base_url}</p><div className="model-tags"><span>{item.api_shape}</span>{item.support_streaming && <span>流式</span>}{item.support_tools && <span>工具</span>}{item.support_image && <span>图片</span>}<span>{item.api_key_configured ? 'Key 已配置' : item.api_key_env ? '环境变量 Key' : 'Key 未配置'}</span></div><footer><small>{item.api_key_env || '后台配置密钥'}</small><button className="admin-quiet" onClick={() => onEdit(item)}>编辑</button></footer></article>)}</div></section>
 }
 
 function ConversationsView({ items, onOpen }: { items: AdminConversation[]; onOpen: (item: AdminConversation) => void }) {
