@@ -25,12 +25,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check deployment file
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          test -f docker-compose.server.yml
-
       - name: Configure SSH
         shell: bash
         env:
