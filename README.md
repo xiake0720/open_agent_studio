@@ -139,7 +139,7 @@ uv run alembic upgrade head
 ```powershell
 uv run alembic downgrade -1
 ```
-
+ 
 回滚会把 `pending` 映射为旧版 `running`，把 `cancelled/timeout/interrupted` 映射为旧版 `failed`，不会删除用户、会话、消息、Token Usage 或运行记录。
 
 创建 Compare Run 示例：
